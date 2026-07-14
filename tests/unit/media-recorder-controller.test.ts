@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RecordingApi } from '../../src/shared/contracts/recording'
-import { MediaRecorderController } from '../../src/renderer/src/features/recording/mediaRecorderController'
+import {
+  MediaRecorderController,
+  RecordingTerminalError,
+} from '../../src/renderer/src/features/recording/mediaRecorderController'
 
 class FakeTrack {
   readonly stop = vi.fn()
@@ -324,5 +327,76 @@ describe('MediaRecorderController', () => {
     await expect(harness.controller.discard()).resolves.toBeUndefined()
     expect(harness.recording.stop).not.toHaveBeenCalled()
     expect(harness.recording.discard).toHaveBeenCalledOnce()
+  })
+
+  it('drains an earlier append before exposing capture failure or allowing discard', async () => {
+    const harness = createHarness()
+    const events: string[] = []
+    let releaseAppend!: () => void
+    const appendGate = new Promise<void>((resolve) => { releaseAppend = resolve })
+    vi.mocked(harness.recording.appendChunk).mockImplementationOnce(async (input) => {
+      events.push('append:start')
+      await appendGate
+      events.push('append:end')
+      return {
+        totalBytes: input.bytes.byteLength,
+        durationMs: input.durationMs,
+        warn: false,
+        rolledToPartIndex: null,
+        activePartIndex: 0,
+        nextChunkIndex: 1,
+      }
+    })
+    vi.mocked(harness.recording.discard).mockImplementation(async () => {
+      events.push('discard')
+    })
+    await harness.controller.start('meeting-1')
+    harness.getRecorder().emit([1])
+    await vi.waitFor(() => expect(events).toEqual(['append:start']))
+    harness.getRecorder().stop = vi.fn(() => { throw new Error('recorder stop failed') })
+
+    const stopping = harness.controller.stop()
+    const stopResult = stopping.catch((error: unknown) => error)
+    harness.getRecorder().emit([2])
+    await Promise.resolve()
+
+    expect(harness.track.stop).not.toHaveBeenCalled()
+    await expect(harness.controller.discard()).rejects.toThrow(/stop.*progress|already.*stop/i)
+    expect(harness.recording.discard).not.toHaveBeenCalled()
+
+    releaseAppend()
+    await expect(stopResult).resolves.toMatchObject({ state: 'capture_failed' })
+    await Promise.resolve()
+    expect(harness.recording.appendChunk).toHaveBeenCalledOnce()
+    expect(harness.track.stop).toHaveBeenCalledOnce()
+
+    await harness.controller.discard()
+    expect(events).toEqual(['append:start', 'append:end', 'discard'])
+  })
+
+  it('reports both stop and append failures as one capture failure after draining', async () => {
+    const harness = createHarness()
+    let releaseAppend!: () => void
+    const appendGate = new Promise<void>((resolve) => { releaseAppend = resolve })
+    vi.mocked(harness.recording.appendChunk).mockImplementationOnce(async () => {
+      await appendGate
+      throw new Error('append failed')
+    })
+    await harness.controller.start('meeting-1')
+    harness.getRecorder().emit([1])
+    await vi.waitFor(() => expect(harness.recording.appendChunk).toHaveBeenCalledOnce())
+    harness.getRecorder().stop = vi.fn(() => { throw new Error('stop failed') })
+
+    const stopping = harness.controller.stop()
+    releaseAppend()
+    const error = (await stopping.catch((cause: unknown) => cause)) as RecordingTerminalError
+
+    expect(error).toMatchObject({ state: 'capture_failed' })
+    expect(error.cause).toBeInstanceOf(AggregateError)
+    expect((error.cause as AggregateError).errors).toEqual([
+      expect.objectContaining({ message: 'stop failed' }),
+      expect.objectContaining({ message: 'append failed' }),
+    ])
+    await harness.controller.discard()
   })
 })

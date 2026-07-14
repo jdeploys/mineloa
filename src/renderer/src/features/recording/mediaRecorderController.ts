@@ -176,18 +176,38 @@ export class MediaRecorderController {
     const { meetingId, recorder } = this.requireCapture()
     this.state = 'stopping'
     try {
+      let recorderStopError: unknown = null
+      let resolveStop!: () => void
+      const stopEvent = new Promise<void>((resolve) => {
+        resolveStop = resolve
+      })
+      const onStop = () => resolveStop()
+      recorder.addEventListener('stop', onStop, { once: true })
       try {
-        await new Promise<void>((resolve) => {
-          recorder.addEventListener('stop', () => resolve(), { once: true })
-          recorder.stop()
-        })
-        await this.appendQueue
+        recorder.stop()
       } catch (error) {
+        recorderStopError = error
+        recorder.removeEventListener('stop', onStop)
+        recorder.removeEventListener('dataavailable', this.onDataAvailable)
+      }
+
+      if (recorderStopError === null) await stopEvent
+
+      await this.appendQueue
+
+      if (recorderStopError !== null) {
         this.state = 'capture_failed'
+        const cause =
+          this.appendFailure === null
+            ? recorderStopError
+            : new AggregateError(
+                [recorderStopError, this.appendFailure],
+                'MediaRecorder stop and recording append both failed',
+              )
         throw new RecordingTerminalError(
           'capture_failed',
           'MediaRecorder could not finish capture; only discard is safe',
-          { cause: error },
+          { cause },
         )
       }
 
