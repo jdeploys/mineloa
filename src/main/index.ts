@@ -1,5 +1,10 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
+import { OpenAiKeyValidator } from './ai/openAiKeyValidator'
+import { KeyringCredentialStore } from './credentials/keyringCredentialStore'
+import { registerSettingsHandlers } from './ipc/registerSettingsHandlers'
 import { createMainWindow } from './window/createMainWindow'
+
+registerSettingsHandlers(ipcMain, new KeyringCredentialStore(), new OpenAiKeyValidator())
 
 app.whenReady().then(() => {
   createMainWindow()
