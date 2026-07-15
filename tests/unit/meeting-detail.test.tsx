@@ -34,6 +34,8 @@ describe('single-document meeting detail', () => {
     const headings = screen.getAllByRole('heading').map((node) => node.textContent)
     expect(headings).toEqual(['제품 회의', '핵심 요약', '결정사항', '할 일', '주요 논의', '화자 이름', '전체 전사문', 'Markdown 미리보기'])
     expect(screen.getByLabelText('회의 오디오')).toHaveAttribute('src', 'nnote-media://meeting/bWVldGluZy0x')
+    expect(screen.getByRole('article')).toHaveClass('document-panel')
+    expect(screen.getByTestId('markdown-preview')).toHaveClass('markdown-code')
   })
 
   it('meeting-detail-shows-renamed-speaker-everywhere-without-changing-transcript', async () => {

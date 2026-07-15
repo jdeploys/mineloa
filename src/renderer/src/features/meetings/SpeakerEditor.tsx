@@ -25,7 +25,7 @@ export function SpeakerEditor({
 
   return <div className="speaker-grid">
     {speakers.length === 0 && <p className="muted">확인된 화자가 없습니다.</p>}
-    {speakers.map((speaker) => <div className="speaker-field" key={speaker.id}>
+    {speakers.map((speaker) => <div className="speaker-field speaker-card" key={speaker.id}>
       <label htmlFor={`speaker-${speaker.id}`}>{speaker.displayName} 이름</label>
       <div>
         <input id={`speaker-${speaker.id}`} value={names[speaker.id] ?? ''} onChange={(event) => setNames((current) => ({ ...current, [speaker.id]: event.target.value }))} />

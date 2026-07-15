@@ -70,6 +70,7 @@ h1, h2, h3 { letter-spacing: -.035em; }
 .action-list small { color: #aeb5ff; white-space: nowrap; }
 .speaker-grid { display: grid; gap: 12px; }
 .speaker-field { display: grid; gap: 6px; }
+.speaker-card { padding: 14px; border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-2); }
 .speaker-field label { color: var(--ink-subtle); font-size: 12px; }
 .speaker-field > div { display: flex; gap: 8px; }
 .speaker-field input { flex: 1; min-width: 0; }

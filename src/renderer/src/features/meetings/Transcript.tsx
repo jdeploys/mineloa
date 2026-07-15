@@ -8,7 +8,7 @@ function timestamp(value: number): string {
 export function Transcript({ segments, speakers }: { segments: readonly TranscriptSegment[]; speakers: readonly Speaker[] }) {
   const names = new Map(speakers.map((speaker) => [speaker.id, speaker.displayName]))
   return <ol className="transcript-list">
-    {segments.map((segment) => <li key={segment.id}>
+    {segments.map((segment) => <li className="transcript-row" key={segment.id}>
       <div className="transcript-meta">
         <strong>{segment.speakerId === null ? '화자 미상' : names.get(segment.speakerId) ?? segment.speakerId}</strong>
         <time>{timestamp(segment.startMs)}–{timestamp(segment.endMs)}</time>

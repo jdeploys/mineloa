@@ -98,7 +98,7 @@ export function MeetingDetail({ document, onBack, onRenameSpeaker, headingRef, p
 
   return <main className="document-shell">
     <button type="button" className="back-button" onClick={onBack}>← 전체 기록</button>
-    <article className="meeting-document">
+    <article className="meeting-document document-panel">
       <header className="document-header">
         <span className={`status status-${document.meeting.status}`}>{document.meeting.status}</span>
         <h1 ref={headingRef} tabIndex={-1}>{document.meeting.title}</h1>
@@ -108,10 +108,10 @@ export function MeetingDetail({ document, onBack, onRenameSpeaker, headingRef, p
         {archive !== undefined && <div className="document-actions"><button type="button" onClick={() => void exportDocument('nnote')}>.nnote 내보내기</button><button type="button" onClick={() => void exportDocument('markdown')}>Markdown 내보내기</button></div>}
         {archiveMessage !== null && <p role="status">{archiveMessage}</p>}
       </header>
-      {orderedSections.map((section) => <section key={section.id}><h2>{section.title}</h2>{section.kind === 'action_items' ? (document.actionItems.length === 0 ? <p className="muted">등록된 할 일이 없습니다.</p> : <ul className="action-list">{document.actionItems.map((item) => <li key={item.id}><span>{item.content}</span><small>담당: {item.assigneeSpeakerId === null ? '미정' : names.get(item.assigneeSpeakerId) ?? item.assigneeSpeakerId}</small></li>)}</ul>) : sectionBody(section, speakers)}</section>)}
-      <section><h2>화자 이름</h2><SpeakerEditor speakers={speakers} onRename={rename} /></section>
-      <section><h2>전체 전사문</h2><Transcript segments={document.transcript} speakers={speakers} /></section>
-      <section className="markdown-preview"><h2>Markdown 미리보기</h2><pre data-testid="markdown-preview">{markdown(document, speakers)}</pre></section>
+      {orderedSections.map((section) => <section className="document-section" key={section.id}><h2>{section.title}</h2>{section.kind === 'action_items' ? (document.actionItems.length === 0 ? <p className="muted">등록된 할 일이 없습니다.</p> : <ul className="action-list">{document.actionItems.map((item) => <li key={item.id}><span>{item.content}</span><small>담당: {item.assigneeSpeakerId === null ? '미정' : names.get(item.assigneeSpeakerId) ?? item.assigneeSpeakerId}</small></li>)}</ul>) : sectionBody(section, speakers)}</section>)}
+      <section className="document-section"><h2>화자 이름</h2><SpeakerEditor speakers={speakers} onRename={rename} /></section>
+      <section className="document-section"><h2>전체 전사문</h2><Transcript segments={document.transcript} speakers={speakers} /></section>
+      <section className="document-section markdown-preview"><h2>Markdown 미리보기</h2><pre className="markdown-code" data-testid="markdown-preview">{markdown(document, speakers)}</pre></section>
     </article>
   </main>
 }
