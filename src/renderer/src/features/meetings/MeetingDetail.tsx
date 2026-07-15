@@ -1,4 +1,4 @@
-import { useState, type Ref } from 'react'
+import { useEffect, useState, type Ref } from 'react'
 import type { ArchiveApi } from '../../../../shared/contracts/archive'
 import type { ProcessingApi, ProcessingStatus as ProcessingStatusValue } from '../../../../shared/contracts/processing'
 import type { Speaker } from '../../../../shared/contracts/meeting'
@@ -52,10 +52,32 @@ export function MeetingDetail({ document, onBack, onRenameSpeaker, headingRef, p
   archive?: ArchiveApi
   onRefresh?(): void | Promise<void>
 }) {
-  const [speakers, setSpeakers] = useState(document.speakers)
+  const [localSpeakerNames, setLocalSpeakerNames] = useState<Record<string, string>>({})
+  const speakers = document.speakers.map((speaker) => ({
+    ...speaker,
+    displayName: localSpeakerNames[speaker.id] ?? speaker.displayName,
+  }))
+  useEffect(() => {
+    setLocalSpeakerNames((current) => Object.fromEntries(Object.entries(current).filter(([speakerId, displayName]) =>
+      document.speakers.some((speaker) => speaker.id === speakerId && speaker.displayName !== displayName),
+    )))
+  }, [document.speakers])
   async function rename(speakerId: string, displayName: string) {
-    const updated = await onRenameSpeaker(document.meeting.id, speakerId, displayName)
-    setSpeakers((current) => current.map((speaker) => speaker.id === updated.id ? updated : speaker))
+    const previous = localSpeakerNames[speakerId]
+      ?? document.speakers.find((speaker) => speaker.id === speakerId)?.displayName
+    setLocalSpeakerNames((current) => ({ ...current, [speakerId]: displayName }))
+    try {
+      const updated = await onRenameSpeaker(document.meeting.id, speakerId, displayName)
+      setLocalSpeakerNames((current) => ({ ...current, [updated.id]: updated.displayName }))
+    } catch (cause) {
+      setLocalSpeakerNames((current) => {
+        const next = { ...current }
+        if (previous === undefined) delete next[speakerId]
+        else next[speakerId] = previous
+        return next
+      })
+      throw cause
+    }
   }
   const names = new Map(speakers.map((speaker) => [speaker.id, speaker.displayName]))
   const [archiveMessage, setArchiveMessage] = useState<string | null>(null)

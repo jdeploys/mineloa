@@ -32,6 +32,7 @@ export function App({
   const [recoveredActive, setRecoveredActive] = useState(false)
   const [screen, setScreen] = useState<Screen>('all')
   const [error, setError] = useState<string | null>(null)
+  const [archiveNotice, setArchiveNotice] = useState<string | null>(null)
   const routeHeading = useRef<HTMLHeadingElement>(null)
   const returnFocusKey = useRef<string | null>(null)
   const controller = useMemo(
@@ -143,11 +144,16 @@ export function App({
   }
 
   async function importMeeting() {
-    const result = await desktopApi.archive.importMeeting()
-    if (result.status === 'failure') { setError(result.message); return }
-    if (result.status === 'success' && result.meetingId !== undefined) {
-      await refreshMeetings()
-      await openMeeting(result.meetingId)
+    setArchiveNotice(null)
+    try {
+      const result = await desktopApi.archive.importMeeting()
+      if (result.status === 'failure') { setArchiveNotice(result.message); return }
+      if (result.status === 'success' && result.meetingId !== undefined) {
+        await refreshMeetings()
+        await openMeeting(result.meetingId)
+      }
+    } catch (cause) {
+      setArchiveNotice(cause instanceof Error ? cause.message : '회의 기록을 가져오지 못했습니다.')
     }
   }
 
@@ -183,6 +189,11 @@ export function App({
 
   return <>
     <div hidden={screen !== 'all'}>
+      {archiveNotice !== null && <div className="document-shell" role="alert">
+        <p>{archiveNotice}</p>
+        <button type="button" onClick={() => void importMeeting()}>가져오기 다시 시도</button>
+        <button type="button" onClick={() => setArchiveNotice(null)}>알림 닫기</button>
+      </div>}
       <Dashboard meetings={meetings} recordingControls={recordingControls} templates={desktopApi.templates} onImport={() => void importMeeting()} onOpenMeeting={(id) => void openMeeting(id)} onNavigate={navigate} />
     </div>
     {screen === 'detail' && document !== null && <MeetingDetail

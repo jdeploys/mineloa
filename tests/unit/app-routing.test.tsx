@@ -153,6 +153,40 @@ describe('App route and recording ownership', () => {
     expect(desktopApi.meetings.get).toHaveBeenCalledWith('imported-1')
   })
 
+  it('keeps the dashboard functional and offers retry or dismissal after an invalid archive import', async () => {
+    const user = userEvent.setup()
+    const desktopApi = api()
+    vi.mocked(desktopApi.archive.importMeeting)
+      .mockResolvedValueOnce({ status: 'failure', code: 'INVALID_ARCHIVE', message: '올바른 NNote 파일이 아닙니다.' })
+      .mockResolvedValueOnce({ status: 'cancelled' })
+    render(<App desktopApi={desktopApi} recordingController={{ start: vi.fn(), stop: vi.fn(), discard: vi.fn() }} />)
+
+    await user.click(await screen.findByRole('button', { name: '.nnote 가져오기' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('올바른 NNote 파일이 아닙니다.')
+    expect(screen.getByRole('button', { name: '녹음 시작' })).toBeVisible()
+    expect(screen.getByRole('button', { name: /제품 회의/ })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '가져오기 다시 시도' }))
+    expect(desktopApi.archive.importMeeting).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('올바른 NNote 파일이 아닙니다.')).not.toBeInTheDocument()
+
+    vi.mocked(desktopApi.archive.importMeeting).mockResolvedValueOnce({ status: 'failure', code: 'INVALID_ARCHIVE', message: '다시 실패했습니다.' })
+    await user.click(screen.getByRole('button', { name: '.nnote 가져오기' }))
+    expect(await screen.findByText('다시 실패했습니다.')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '알림 닫기' }))
+    expect(screen.queryByText('다시 실패했습니다.')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '녹음 시작' })).toBeVisible()
+  })
+
+  it('keeps a recovery startup failure as a fatal screen', async () => {
+    const desktopApi = api()
+    vi.mocked(desktopApi.recovery.scan).mockRejectedValue(new Error('복구 인덱스 손상'))
+    render(<App desktopApi={desktopApi} recordingController={{ start: vi.fn(), stop: vi.fn(), discard: vi.fn() }} />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('복구 또는 기록 확인에 실패했습니다. 새 녹음을 시작하지 않았습니다: 복구 인덱스 손상')
+    expect(screen.queryByRole('button', { name: '녹음 시작' })).not.toBeInTheDocument()
+  })
+
   it('rolls back a failed renderer recovery attachment and allows coherent retry', async () => {
     const user = userEvent.setup()
     const desktopApi = api()

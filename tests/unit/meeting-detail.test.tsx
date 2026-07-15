@@ -68,6 +68,47 @@ describe('single-document meeting detail', () => {
     expect(screen.getByText('원본 발언입니다.')).toBeVisible()
   })
 
+  it('syncs completed document speakers into every rendered speaker reference after a recorded document rerender', () => {
+    const recorded = documentFixture()
+    recorded.meeting = { ...recorded.meeting, status: 'recorded' }
+    recorded.speakers = []
+    recorded.transcript = []
+    recorded.summarySections = []
+    recorded.actionItems = []
+    const completed = documentFixture()
+    const { rerender } = render(<MeetingDetail document={recorded} onBack={vi.fn()} onRenameSpeaker={vi.fn()} />)
+
+    rerender(<MeetingDetail document={completed} onBack={vi.fn()} onRenameSpeaker={vi.fn()} />)
+
+    expect(screen.getByText('화자 B가 제안을 설명했습니다.')).toBeVisible()
+    expect(screen.getByText('담당: 화자 B')).toBeVisible()
+    expect(screen.getByLabelText('화자 B 이름')).toHaveValue('화자 B')
+    expect(screen.getByText('화자 B')).toBeVisible()
+    expect(screen.getByTestId('markdown-preview')).toHaveTextContent('화자 B가 제안을 설명했습니다.')
+    expect(screen.getByTestId('markdown-preview')).toHaveTextContent('담당: 화자 B')
+    expect(screen.getByTestId('markdown-preview')).toHaveTextContent('화자 B: 원본 발언입니다.')
+  })
+
+  it('preserves a locally confirmed speaker rename when a stale document rerenders', async () => {
+    const user = userEvent.setup()
+    const source = documentFixture()
+    const rename = vi.fn(async (_meetingId: string, _speakerId: string, displayName: string) => ({
+      ...source.speakers[0]!, displayName,
+    }))
+    const { rerender } = render(<MeetingDetail document={source} onBack={vi.fn()} onRenameSpeaker={rename} />)
+    await user.clear(screen.getByLabelText('화자 B 이름'))
+    await user.type(screen.getByLabelText('화자 B 이름'), '민지')
+    await user.click(screen.getByRole('button', { name: '화자 B 이름 저장' }))
+    expect(await screen.findByText('민지가 제안을 설명했습니다.')).toBeVisible()
+
+    rerender(<MeetingDetail document={{ ...source }} onBack={vi.fn()} onRenameSpeaker={rename} />)
+
+    expect(screen.getByText('민지가 제안을 설명했습니다.')).toBeVisible()
+    expect(screen.getByText('담당: 민지')).toBeVisible()
+    expect(screen.getByLabelText('민지 이름')).toHaveValue('민지')
+    expect(screen.getByTestId('markdown-preview')).toHaveTextContent('민지: 원본 발언입니다.')
+  })
+
   it('maps the real default action and discussion sections by stable identity in Markdown', () => {
     render(<MeetingDetail document={documentFixture()} onBack={vi.fn()} onRenameSpeaker={vi.fn()} />)
     const preview = screen.getByTestId('markdown-preview')
