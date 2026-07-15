@@ -1,2 +1,7 @@
 .superpowers/
 .worktrees/
+node_modules/
+out/
+dist/
+test-results/
+playwright-report/

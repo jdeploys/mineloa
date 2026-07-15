@@ -1,0 +1,88 @@
+name: desktop-ci
+
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:e2e
+      - name: Package and verify Windows (unsigned)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm run package:win
+          node scripts/verify-package.mjs dist/win-unpacked
+      - name: Package and verify macOS (unsigned)
+        if: runner.os == 'macOS'
+        run: |
+          CSC_IDENTITY_AUTO_DISCOVERY=false npm run package:mac
+          node scripts/verify-package.mjs dist/mac*/Nnote.app
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nnote-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*-unpacked/**
+            dist/mac*/Nnote.app/**
+          if-no-files-found: ignore
+
+  mac-visual-baseline:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium
+      - name: Compare tracked macOS visual baselines
+        id: visual-compare
+        continue-on-error: true
+        run: npm run test:visual
+      - name: Preserve comparison diffs
+        if: steps.visual-compare.outcome == 'failure'
+        run: |
+          if [ -d test-results ]; then cp -R test-results visual-comparison-results; fi
+      - name: Generate unreviewed macOS candidate baselines
+        if: steps.visual-compare.outcome == 'failure'
+        continue-on-error: true
+        run: npm run test:visual:update
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-visual-candidates-and-diffs
+          path: |
+            tests/visual/snapshots/darwin/**
+            visual-comparison-results/**
+            test-results/**
+            playwright-report/**
+          if-no-files-found: ignore
+      - name: Reject missing, changed, or unreviewed macOS pixels
+        if: steps.visual-compare.outcome == 'failure'
+        run: |
+          echo "macOS visual comparison failed. Review the uploaded candidate and diff artifacts, commit approved darwin baselines, and rerun CI."
+          exit 1

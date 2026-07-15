@@ -1,0 +1,117 @@
+{
+  "name": "nnote",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Secure desktop meeting recorder",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "rebuild:electron": "electron-rebuild -f -w better-sqlite3 --version 43.1.0",
+    "test:e2e": "npm run rebuild:electron && playwright test -c playwright.e2e.config.ts",
+    "test:visual": "playwright test tests/visual",
+    "test:visual:update": "playwright test tests/visual --update-snapshots",
+    "lint": "eslint . --max-warnings=0",
+    "package:win": "npm run build && npm run rebuild:electron && electron-builder --win --publish never",
+    "package:mac": "npm run build && npm run rebuild:electron && electron-builder --mac --publish never",
+    "verify:win": "node scripts/verify-package.mjs dist/win-unpacked"
+  },
+  "build": {
+    "appId": "com.jdeploys.nnote",
+    "productName": "Nnote",
+    "npmRebuild": true,
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+      "node_modules/@napi-rs/keyring-*/**/*"
+    ],
+    "files": [
+      "out/**/*",
+      "package.json",
+      "!node_modules/**/*",
+      "node_modules/better-sqlite3/package.json",
+      "node_modules/better-sqlite3/lib/**/*",
+      "node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+      "node_modules/bindings/**/*",
+      "node_modules/file-uri-to-path/**/*",
+      "node_modules/@napi-rs/keyring/**/*",
+      "node_modules/@napi-rs/keyring-*/**/*",
+      "!**/*.map",
+      "!**/*.webm",
+      "!**/*.nnote",
+      "!**/*.sqlite",
+      "!**/*.sqlite-wal",
+      "!**/*.sqlite-shm",
+      "!**/.env*",
+      "!**/.superpowers/**/*",
+      "!tests/**/*"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "icon": "build/icons/icon.ico",
+      "target": [
+        "nsis",
+        "dir"
+      ]
+    },
+    "mac": {
+      "icon": "build/icons/icon.icns",
+      "target": [
+        "dmg",
+        "dir"
+      ],
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Nnote needs microphone access to record meetings locally on this Mac."
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
+  },
+  "dependencies": {
+    "@napi-rs/keyring": "^1.3.0",
+    "better-sqlite3": "^12.11.1",
+    "fflate": "^0.8.3",
+    "openai": "^6.46.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@babel/eslint-parser": "^7.29.7",
+    "@babel/preset-react": "^7.29.7",
+    "@babel/preset-typescript": "^7.29.7",
+    "@electron/rebuild": "^4.2.0",
+    "@eslint/js": "^9.39.2",
+    "@playwright/test": "^1.61.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "eslint": "^9.39.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.7.0",
+    "jsdom": "^29.1.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

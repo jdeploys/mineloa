@@ -1,0 +1,18 @@
+:root {
+  color-scheme: light;
+  --ink: #18221c;
+  --muted: #647068;
+  --paper: #fbfaf6;
+  --surface: #ffffff;
+  --line: #dce2dc;
+  --accent: #176c4f;
+  --accent-strong: #0e5039;
+  --accent-soft: #e4f1ea;
+  --danger: #a33a36;
+  --warning: #8a5b12;
+  --shadow: 0 18px 50px rgb(25 46 34 / 9%);
+  --radius: 18px;
+  font-family: Inter, Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+}

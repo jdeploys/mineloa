@@ -80,8 +80,8 @@ Create scripts `dev`, `build`, `typecheck`, `test`, `test:unit`, `test:integrati
 Run:
 
 ```powershell
-npm install electron@43.1.0 electron-vite@5.0.0 react@19.2.7 react-dom@19.2.7 better-sqlite3@12.11.1 zod@4.4.3 openai@6.46.0 @napi-rs/keyring@1.3.0 fflate
-npm install -D typescript@7.0.2 vitest@4.1.10 @playwright/test@1.61.1 electron-builder@26.15.3 @vitejs/plugin-react @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom eslint
+npm install react@19.2.7 react-dom@19.2.7 better-sqlite3@12.11.1 zod@4.4.3 openai@6.46.0 @napi-rs/keyring@1.3.0 fflate
+npm install -D electron@43.1.0 electron-vite@5.0.0 typescript@7.0.2 vitest@4.1.10 @playwright/test@1.61.1 electron-builder@26.15.3 @vitejs/plugin-react@5.1.4 @types/react@19.2.14 @types/react-dom@19.2.3 @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom eslint
 ```
 
 Expected: `npm install` exits 0 and `package-lock.json` is created.
