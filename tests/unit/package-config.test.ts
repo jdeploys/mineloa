@@ -100,6 +100,16 @@ describe('release package configuration', () => {
     }
   })
 
+  it('installs NASM with the Windows toolchain while preserving optimized FFmpeg assembly', () => {
+    for (const name of ['ci.yml', 'release.yml']) {
+      const workflow = readFileSync(resolve('.github/workflows', name), 'utf8')
+      expect(workflow).toContain('mingw-w64-x86_64-toolchain')
+      expect(workflow).toMatch(/install:\s+>-\s+(?:.|\r|\n)*?\bnasm\b/)
+    }
+    const script = readFileSync(resolve('scripts/build-local-runtime.ps1'), 'utf8')
+    expect(script).not.toContain('--disable-x86asm')
+  })
+
   it('pins actions, limits permissions, and keeps secrets in the mac package step', () => {
     const workflow = readFileSync(resolve('.github/workflows/release.yml'), 'utf8').replace(/\r\n/g, '\n')
     expect(workflow).toContain('permissions:\n  contents: read')

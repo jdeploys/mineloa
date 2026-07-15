@@ -24,6 +24,7 @@ jobs:
           install: >-
             base-devel
             mingw-w64-x86_64-toolchain
+            nasm
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
