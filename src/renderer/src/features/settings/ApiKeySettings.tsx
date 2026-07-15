@@ -29,7 +29,7 @@ export function ApiKeySettings({ settings }: ApiKeySettingsProps) {
 
   useEffect(() => {
     void refreshStatus().catch(() => {
-      setError('The API key status could not be loaded.')
+      setError('API 키 상태를 불러오지 못했습니다.')
     })
 
     return () => {
@@ -50,10 +50,10 @@ export function ApiKeySettings({ settings }: ApiKeySettingsProps) {
       try {
         await refreshStatus()
       } catch {
-        setError('The API key was saved, but its status could not be refreshed.')
+        setError('API 키는 저장했지만 상태를 새로고침하지 못했습니다.')
       }
     } catch {
-      setError('The API key could not be validated.')
+      setError('API 키를 검증하지 못했습니다.')
     } finally {
       setBusy(false)
     }
@@ -71,10 +71,10 @@ export function ApiKeySettings({ settings }: ApiKeySettingsProps) {
       try {
         await refreshStatus()
       } catch {
-        setError('The API key was deleted, but its status could not be refreshed.')
+        setError('API 키는 삭제했지만 상태를 새로고침하지 못했습니다.')
       }
     } catch {
-      setError('The API key could not be deleted.')
+      setError('API 키를 삭제하지 못했습니다.')
     } finally {
       setBusy(false)
     }
@@ -83,12 +83,12 @@ export function ApiKeySettings({ settings }: ApiKeySettingsProps) {
   return (
     <section className="settings-panel" aria-labelledby="api-key-settings-title">
       <div className="settings-heading">
-        <div><p className="eyebrow">OPENAI</p><h2 id="api-key-settings-title">API key settings</h2></div>
-        <span className="credential-status">{status === null ? 'Status unavailable' : status.configured ? 'Configured' : 'Not configured'}</span>
+        <div><p className="eyebrow">OPENAI</p><h2 id="api-key-settings-title">API 키 설정</h2></div>
+        <span className="credential-status">{status === null ? '상태 확인 불가' : status.configured ? '설정됨' : '설정되지 않음'}</span>
       </div>
-      {status?.lastValidatedAt ? <p className="settings-meta">Last validated: {status.lastValidatedAt}</p> : null}
+      {status?.lastValidatedAt ? <p className="settings-meta">마지막 검증: {status.lastValidatedAt}</p> : null}
       <form className="credential-form" onSubmit={save}>
-        <label htmlFor="openai-api-key">OpenAI API key</label>
+        <label htmlFor="openai-api-key">OpenAI API 키</label>
         <input
           id="openai-api-key"
           type="password"
@@ -97,10 +97,10 @@ export function ApiKeySettings({ settings }: ApiKeySettingsProps) {
           onChange={(event) => setValue(event.target.value)}
         />
         <button type="submit" disabled={busy || value.length === 0}>
-          Save API key
+          API 키 저장
         </button>
       </form>
-      <div className="danger-zone"><div><strong>저장된 API 키 삭제</strong><p>이 기기의 보안 저장소에서만 제거합니다.</p></div><button className="button-danger" type="button" disabled={busy || !status?.configured} onClick={remove}>Delete API key</button></div>
+      <div className="danger-zone"><div><strong>저장된 API 키 삭제</strong><p>이 기기의 보안 저장소에서만 제거합니다.</p></div><button className="button-danger" type="button" disabled={busy || !status?.configured} onClick={remove}>API 키 삭제</button></div>
       {error ? <p role="alert">{error}</p> : null}
     </section>
   )
