@@ -26,6 +26,7 @@ Store transcription and summary choices independently:
 
 - `transcriptionProvider`: `openai` or `local_whisper`.
 - `summaryProvider`: `openai` or `codex_cli`.
+- `localWhisperModel`: `base` or `small`, defaulting to `base` until the user chooses another installed model.
 
 The default pair is `openai` plus `openai`. The settings UI keeps the API key controls prominent and places provider selection, local model management, and CLI status under an advanced section.
 
@@ -49,7 +50,7 @@ Concrete adapters own every provider-specific detail:
 
 A provider registry is created once in the main-process composition root. It maps stable IDs to adapter instances and is the only place that resolves a persisted provider ID. `ProcessingService`, `TranscriptionService`, and `SummaryService` depend on the selected port interface and do not know how many providers exist or contain provider-name conditionals. Adding another provider requires a new adapter plus one registry entry, not edits throughout the processing flow.
 
-Provider descriptors returned to the renderer contain generic fields such as ID, display name, availability, privacy classification, and capabilities. The settings UI renders those descriptors through shared provider controls. Provider-specific actions such as Whisper model management or Codex authentication guidance live in focused child components selected by descriptor capability, not in one monolithic conditional component.
+The registry exposes provider descriptors containing generic fields such as ID, stage, display name, availability, privacy classification, and capabilities. A settings IPC endpoint returns only those safe descriptors to the renderer. The settings UI renders them through shared provider controls. Provider-specific actions such as Whisper model management or Codex authentication guidance live in focused child components selected by descriptor capability, not in one monolithic conditional component.
 
 Error translation follows the same boundary. Each adapter converts process, SDK, and validation failures into the existing safe processing-error contract before returning control to orchestration. Orchestration remains responsible only for state transitions, transactions, retries, and progress events.
 
