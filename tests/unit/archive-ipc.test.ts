@@ -8,6 +8,19 @@ function setup(dialog: any, repository: any) {
 }
 
 describe('archive IPC', () => {
+  it.each(['recording', 'recoverable', 'transcribing', 'summarizing', 'failed'])(
+    'rejects transient %s export before opening a save dialog or writing', async (status) => {
+      const showSaveDialog = vi.fn()
+      const handlers = setup({ showSaveDialog, showOpenDialog: vi.fn() }, {
+        requireById: () => ({ id: 'meeting-1', title: '회의', status }),
+      })
+
+      expect(await handlers.get('archive:export-meeting')!({}, 'meeting-1')).toMatchObject({ status: 'failure', code: 'EXPORT_FAILED' })
+      expect(await handlers.get('archive:export-markdown')!({}, 'meeting-1')).toMatchObject({ status: 'failure', code: 'EXPORT_FAILED' })
+      expect(showSaveDialog).not.toHaveBeenCalled()
+    },
+  )
+
   it('reads from one open handle and rejects growth or truncation without a path stat/read race', async () => {
     let statCalls = 0
     let readCalls = 0

@@ -39,26 +39,28 @@ export async function importMeetingArchive(bytes: Uint8Array, database: Database
     throw new Error('Summary sections require an archived template snapshot')
   }
 
-  const finalPath = archive.audio === null ? null : completedPartPath(recordingsDirectory, meetingId, 0)
-  const temporaryPath = finalPath === null ? null : importStagedAudioPath(recordingsDirectory, meetingId)
-  const journalPath = finalPath === null ? null : importJournalPath(recordingsDirectory, meetingId)
-  const journalTemporaryPath = finalPath === null ? null : importJournalTemporaryPath(recordingsDirectory, meetingId)
+  const finalPaths = archive.audioParts.map((part) => completedPartPath(recordingsDirectory, meetingId, part.partIndex))
+  const temporaryPaths = archive.audioParts.map((part) => importStagedAudioPath(recordingsDirectory, meetingId, part.partIndex))
+  const journalPath = archive.audioParts.length === 0 ? null : importJournalPath(recordingsDirectory, meetingId)
+  const journalTemporaryPath = archive.audioParts.length === 0 ? null : importJournalTemporaryPath(recordingsDirectory, meetingId)
   let databaseCommitted = false
-  let finalOwned = false
+  const finalOwned = new Set<string>()
   try {
-    if (archive.audio !== null && temporaryPath !== null && finalPath !== null) {
+    if (archive.audioParts.length > 0) {
       await mkdir(recordingsDirectory, { recursive: true })
-      await writeImportJournal(recordingsDirectory, meetingId)
+      await writeImportJournal(recordingsDirectory, meetingId, archive.audioParts.length)
       injectFault(fault, 'before-stage-open')
-      const handle = await open(temporaryPath, 'wx')
-      try {
-        if (fault.interruptAt === 'during-stage-write' || fault.failAt === 'during-stage-write') {
-          await handle.writeFile(archive.audio.subarray(0, Math.max(1, Math.floor(archive.audio.byteLength / 2))))
-          injectFault(fault, 'during-stage-write')
-        }
-        await handle.writeFile(archive.audio)
-        await handle.sync()
-      } finally { await handle.close() }
+      for (const [index, part] of archive.audioParts.entries()) {
+        const handle = await open(temporaryPaths[index]!, 'wx')
+        try {
+          if (index === 0 && (fault.interruptAt === 'during-stage-write' || fault.failAt === 'during-stage-write')) {
+            await handle.writeFile(part.bytes.subarray(0, Math.max(1, Math.floor(part.bytes.byteLength / 2))))
+            injectFault(fault, 'during-stage-write')
+          }
+          await handle.writeFile(part.bytes)
+          await handle.sync()
+        } finally { await handle.close() }
+      }
       await syncDirectory(recordingsDirectory)
       injectFault(fault, 'after-stage-fsync')
     }
@@ -74,9 +76,10 @@ export async function importMeetingArchive(bytes: Uint8Array, database: Database
       database.prepare(`INSERT INTO meetings (id, title, created_at, updated_at, duration_ms, status, audio_policy, audio_path, audio_byte_count, selected_template_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(meetingId, archive.meeting.title, archive.meeting.createdAt, archive.meeting.updatedAt, archive.meeting.durationMs,
-          archive.meeting.status, archive.meeting.audioPolicy, finalPath === null ? null : basename(finalPath), archive.audio?.byteLength ?? 0, templateId)
-      if (finalPath !== null && archive.audio !== null) database.prepare('INSERT INTO recording_parts (meeting_id, part_index, relative_path, byte_count, duration_ms) VALUES (?, 0, ?, ?, ?)')
-        .run(meetingId, basename(finalPath), archive.audio.byteLength, archive.meeting.durationMs)
+          archive.meeting.status, archive.meeting.audioPolicy, finalPaths.length === 0 ? null : basename(finalPaths[0]!),
+          archive.audioParts.reduce((total, part) => total + part.byteCount, 0), templateId)
+      const insertPart = database.prepare('INSERT INTO recording_parts (meeting_id, part_index, relative_path, byte_count, duration_ms) VALUES (?, ?, ?, ?, ?)')
+      for (const [index, part] of archive.audioParts.entries()) insertPart.run(meetingId, part.partIndex, basename(finalPaths[index]!), part.byteCount, part.durationMs)
       for (const speaker of archive.transcript.speakers) database.prepare('INSERT INTO speakers (id, meeting_id, display_name) VALUES (?, ?, ?)')
         .run(speakerIds.get(speaker.id), meetingId, speaker.displayName)
       for (const segment of archive.transcript.segments) database.prepare('INSERT INTO transcript_segments (id, meeting_id, speaker_id, start_ms, end_ms, text) VALUES (?, ?, ?, ?, ?, ?)')
@@ -89,15 +92,18 @@ export async function importMeetingArchive(bytes: Uint8Array, database: Database
       databaseCommitted = true
     } catch (error) { database.exec('ROLLBACK'); throw error }
     injectFault(fault, 'after-database-commit')
-    if (temporaryPath !== null && finalPath !== null && journalPath !== null) {
-      await rename(temporaryPath, finalPath)
-      finalOwned = true
+    if (journalPath !== null) {
+      for (const [index, temporaryPath] of temporaryPaths.entries()) {
+        const finalPath = finalPaths[index]!
+        await rename(temporaryPath, finalPath)
+        finalOwned.add(finalPath)
+      }
       await syncDirectory(recordingsDirectory)
       injectFault(fault, 'after-audio-rename')
       await rm(journalPath, { force: true })
       await syncDirectory(recordingsDirectory)
     }
-    return { meetingId, importedAudio: archive.audio !== null }
+    return { meetingId, importedAudio: archive.audioParts.length > 0 }
   } catch (error) {
     if (error instanceof SimulatedImportCrash) throw error
     if (databaseCommitted) {
@@ -108,8 +114,8 @@ export async function importMeetingArchive(bytes: Uint8Array, database: Database
         database.exec('COMMIT')
       } catch (cleanupError) { database.exec('ROLLBACK'); throw new AggregateError([error, cleanupError], 'Import and rollback failed') }
     }
-    if (temporaryPath !== null) await rm(temporaryPath, { force: true }).catch(() => undefined)
-    if (finalPath !== null && finalOwned) await rm(finalPath, { force: true }).catch(() => undefined)
+    await Promise.all(temporaryPaths.map((path) => rm(path, { force: true }).catch(() => undefined)))
+    await Promise.all([...finalOwned].map((path) => rm(path, { force: true }).catch(() => undefined)))
     if (journalPath !== null) await rm(journalPath, { force: true }).catch(() => undefined)
     if (journalTemporaryPath !== null) await rm(journalTemporaryPath, { force: true }).catch(() => undefined)
     if (journalPath !== null) await syncDirectory(recordingsDirectory).catch(() => undefined)

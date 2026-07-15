@@ -22,7 +22,7 @@ interface BoundedReadHandle {
 }
 interface BoundedReadFileSystem { open(path: string, flags: 'r'): Promise<BoundedReadHandle> }
 
-type ExportRepository = Pick<MeetingRepository, 'requireById' | 'listSpeakers' | 'listTranscript' | 'listSummarySections' | 'listActionItems'>
+type ExportRepository = Pick<MeetingRepository, 'requireById' | 'listSpeakers' | 'listTranscript' | 'listSummarySections' | 'listActionItems' | 'listRecordingParts'>
 type TemplateLookup = Pick<TemplateRepository, 'findById'>
 
 async function atomicWrite(destination: string, bytes: Uint8Array | string): Promise<void> {
@@ -73,6 +73,10 @@ function failure(code: 'EXPORT_FAILED' | 'IMPORT_FAILED' | 'INVALID_ARCHIVE', er
   return { status: 'failure', code, message }
 }
 
+function assertExportableStatus(status: string): void {
+  if (status !== 'recorded' && status !== 'completed') throw new Error('Only stable recorded or completed meetings can be exported')
+}
+
 export function registerArchiveHandlers(
   ipcMain: IpcMainLike, dialog: DialogLike, repository: ExportRepository, templates: TemplateLookup,
   database: Database.Database, recordingsDirectory: string,
@@ -81,6 +85,7 @@ export function registerArchiveHandlers(
     try {
       const meetingId = MeetingIdSchema.parse(rawMeetingId)
       const meeting = repository.requireById(meetingId)
+      assertExportableStatus(meeting.status)
       const selected = await dialog.showSaveDialog({ title: 'Nnote 내보내기', defaultPath: `${meeting.title}.nnote`, filters: [{ name: 'Nnote', extensions: ['nnote'] }] })
       if (selected.canceled || selected.filePath === undefined) return { status: 'cancelled' }
       const result = await exportMeetingArchive(meetingId, repository, templates, recordingsDirectory)
@@ -93,6 +98,7 @@ export function registerArchiveHandlers(
     try {
       const meetingId = MeetingIdSchema.parse(rawMeetingId)
       const meeting = repository.requireById(meetingId)
+      assertExportableStatus(meeting.status)
       const selected = await dialog.showSaveDialog({ title: 'Markdown 내보내기', defaultPath: `${meeting.title}.md`, filters: [{ name: 'Markdown', extensions: ['md'] }] })
       if (selected.canceled || selected.filePath === undefined) return { status: 'cancelled' }
       const template = templates.findById(meeting.selectedTemplateId ?? DEFAULT_TEMPLATE_ID)

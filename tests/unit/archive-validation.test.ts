@@ -25,6 +25,23 @@ describe('Nnote archive validation', () => {
     expect(parseArchive(zipSync(valid)).meeting.title).toBe('회의')
   })
 
+  it('rejects archive v2 audio parts with a decreasing ordered duration cursor', () => {
+    const entries = {
+      ...valid,
+      'audio/part-0.webm': minimalWebm,
+      'audio/part-1.webm': minimalWebm,
+      'manifest.json': strToU8(JSON.stringify({
+        format: 'nnote', version: 2,
+        entries: ['meeting.json', 'transcript.json', 'summary.json', 'audio/part-0.webm', 'audio/part-1.webm'],
+        audioParts: [
+          { partIndex: 0, entry: 'audio/part-0.webm', byteCount: minimalWebm.byteLength, durationMs: 2 },
+          { partIndex: 1, entry: 'audio/part-1.webm', byteCount: minimalWebm.byteLength, durationMs: 1 },
+        ],
+      })),
+    }
+    expect(() => parseArchive(zipSync(entries))).toThrow(/duration|ordered/i)
+  })
+
   it.each([
     ['traversal', { ...valid, '../meeting.json': strToU8('{}') }],
     ['absolute path', { ...valid, 'C:\\audio.webm': new Uint8Array() }],
@@ -36,7 +53,7 @@ describe('Nnote archive validation', () => {
   })
 
   it('rejects unsupported versions and malformed JSON', () => {
-    const unsupported = { ...valid, 'manifest.json': strToU8(JSON.stringify({ format: 'nnote', version: 2, entries: [] })) }
+    const unsupported = { ...valid, 'manifest.json': strToU8(JSON.stringify({ format: 'nnote', version: 3, entries: [] })) }
     expect(() => parseArchive(zipSync(unsupported))).toThrow(/version/i)
     const malformed = { ...valid, 'meeting.json': strToU8('{') }
     expect(() => parseArchive(zipSync(malformed))).toThrow(/json/i)

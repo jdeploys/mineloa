@@ -5,7 +5,7 @@ describe('recovery IPC', () => {
   it('accepts meeting ids but never renderer filesystem paths', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const service = {
-      scan: vi.fn(async () => []), recover: vi.fn(), keepAsFile: vi.fn(), discard: vi.fn(),
+      scan: vi.fn(async () => []), recover: vi.fn(), suspend: vi.fn(), keepAsFile: vi.fn(), exportOnly: vi.fn(), discard: vi.fn(),
     }
     registerRecoveryHandlers(
       { handle: (channel, listener) => handlers.set(channel, listener) },
@@ -20,7 +20,7 @@ describe('recovery IPC', () => {
   it('requires explicitDelete true at the IPC boundary', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const service = {
-      scan: vi.fn(), recover: vi.fn(), keepAsFile: vi.fn(), discard: vi.fn(),
+      scan: vi.fn(), recover: vi.fn(), suspend: vi.fn(), keepAsFile: vi.fn(), exportOnly: vi.fn(), discard: vi.fn(),
     }
     registerRecoveryHandlers(
       { handle: (channel, listener) => handlers.set(channel, listener) },
@@ -31,5 +31,21 @@ describe('recovery IPC', () => {
     expect(service.discard).not.toHaveBeenCalled()
     await handlers.get('recovery:discard')!({}, 'meeting-1', { explicitDelete: true })
     expect(service.discard).toHaveBeenCalledWith('meeting-1', { explicitDelete: true })
+  })
+
+  it('exports an inspected export-only recording through a native save dialog without renderer paths', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const exportOnly = vi.fn(async () => undefined)
+    const dialog = { showSaveDialog: vi.fn(async () => ({ canceled: false, filePath: 'C:\\trusted\\recovered.webm' })) }
+    registerRecoveryHandlers(
+      { handle: (channel, listener) => handlers.set(channel, listener) },
+      { scan: vi.fn(), recover: vi.fn(), suspend: vi.fn(), keepAsFile: vi.fn(), discard: vi.fn(), exportOnly },
+      dialog,
+    )
+
+    expect(await handlers.get('recovery:export-only')!({}, 'meeting-1')).toEqual({ status: 'success' })
+    expect(dialog.showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({ filters: [{ name: 'WebM audio', extensions: ['webm'] }] }))
+    expect(exportOnly).toHaveBeenCalledWith('meeting-1', 'C:\\trusted\\recovered.webm')
+    await expect(Promise.resolve().then(() => handlers.get('recovery:export-only')!({}, { meetingId: 'meeting-1', path: 'C:\\evil' }))).rejects.toThrow()
   })
 })

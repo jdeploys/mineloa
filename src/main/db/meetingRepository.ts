@@ -62,6 +62,24 @@ interface ActionItemRow {
   completed: number
 }
 
+interface RecordingPartRow {
+  meeting_id: string
+  part_index: number
+  relative_path: string
+  byte_count: number
+  duration_ms: number
+}
+
+export interface RecordingPart {
+  meetingId: string
+  partIndex: number
+  relativePath: string
+  byteCount: number
+  durationMs: number
+}
+
+export type RecordingPartInput = Omit<RecordingPart, 'meetingId'>
+
 export type ProcessingStage = 'transcribing' | 'summarizing' | 'cleanup'
 
 export interface ProcessingAttempt {
@@ -190,6 +208,47 @@ export class MeetingRepository {
       .prepare("SELECT * FROM meetings WHERE status != 'deleted' ORDER BY created_at DESC, id DESC LIMIT ?")
       .all(limit) as MeetingRow[]
     return rows.map(toMeeting)
+  }
+
+  replaceRecordingParts(meetingId: string, values: readonly RecordingPartInput[]): RecordingPart[] {
+    const validated = values.map((value, index) => {
+      if (value.partIndex !== index) throw new Error('Recording parts must use contiguous indices starting at zero')
+      if (value.relativePath.length === 0 || value.relativePath === '.' || value.relativePath === '..' || /[\\/]/.test(value.relativePath)) {
+        throw new Error('Recording part path must be a relative file name')
+      }
+      if (!Number.isSafeInteger(value.byteCount) || value.byteCount < 0) throw new Error('Recording part byte count must be a non-negative safe integer')
+      if (!Number.isSafeInteger(value.durationMs) || value.durationMs < 0) throw new Error('Recording part duration must be a non-negative safe integer')
+      return value
+    })
+    return inTransaction(this.database, () => {
+      this.requireById(meetingId)
+      this.database.prepare('DELETE FROM recording_parts WHERE meeting_id = ?').run(meetingId)
+      const insert = this.database.prepare(
+        'INSERT INTO recording_parts (meeting_id, part_index, relative_path, byte_count, duration_ms) VALUES (?, ?, ?, ?, ?)',
+      )
+      for (const value of validated) insert.run(meetingId, value.partIndex, value.relativePath, value.byteCount, value.durationMs)
+      return this.listRecordingParts(meetingId)
+    })
+  }
+
+  listRecordingParts(meetingId: string): RecordingPart[] {
+    const rows = this.database.prepare(
+      'SELECT * FROM recording_parts WHERE meeting_id = ? ORDER BY part_index',
+    ).all(meetingId) as RecordingPartRow[]
+    return rows.map((row) => ({
+      meetingId: row.meeting_id,
+      partIndex: row.part_index,
+      relativePath: row.relative_path,
+      byteCount: row.byte_count,
+      durationMs: row.duration_ms,
+    }))
+  }
+
+  deleteRecordingParts(meetingId: string): void {
+    inTransaction(this.database, () => {
+      this.requireById(meetingId)
+      this.database.prepare('DELETE FROM recording_parts WHERE meeting_id = ?').run(meetingId)
+    })
   }
 
   transitionRecordingStatus(id: string, status: 'recording' | 'recoverable'): Meeting {

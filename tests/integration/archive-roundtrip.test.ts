@@ -14,6 +14,35 @@ describe('Nnote archive round trip', () => {
   const roots: string[] = []
   afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))) })
 
+  it('exports archive v2 with every ordered recording part and imports ownership for all parts', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nnote-archive-v2-')); roots.push(root)
+    const sourceRecordings = join(root, 'source'); const targetRecordings = join(root, 'target')
+    await mkdir(sourceRecordings); await mkdir(targetRecordings)
+    const sourceDb = openDatabase(join(root, 'source.sqlite')); const targetDb = openDatabase(join(root, 'target.sqlite'))
+    const now = '2026-07-15T00:00:00.000Z'
+    const first = 'source.part-0.webm'; const second = 'source.part-1.webm'
+    await writeFile(join(sourceRecordings, first), minimalWebm)
+    await writeFile(join(sourceRecordings, second), minimalWebm)
+    sourceDb.prepare('INSERT INTO meetings VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('source', '회의', now, now, 2, 'recorded', 'keep', first, minimalWebm.byteLength * 2, null)
+    sourceDb.prepare('INSERT INTO recording_parts VALUES (?, ?, ?, ?, ?)').run('source', 0, first, minimalWebm.byteLength, 1)
+    sourceDb.prepare('INSERT INTO recording_parts VALUES (?, ?, ?, ?, ?)').run('source', 1, second, minimalWebm.byteLength, 2)
+
+    const exported = await exportMeetingArchive('source', new MeetingRepository(sourceDb), new TemplateRepository(sourceDb), sourceRecordings)
+    const parsed = parseArchive(exported.bytes)
+    expect(parsed.manifest.version).toBe(2)
+    expect(parsed.audioParts.map((part) => [part.partIndex, part.entry, part.bytes])).toEqual([
+      [0, 'audio/part-0.webm', minimalWebm],
+      [1, 'audio/part-1.webm', minimalWebm],
+    ])
+    expect(exported.audioCoverage).toBe('all-parts')
+
+    const imported = await importMeetingArchive(exported.bytes, targetDb, targetRecordings)
+    const parts = new MeetingRepository(targetDb).listRecordingParts(imported.meetingId)
+    expect(parts.map((part) => [part.partIndex, part.byteCount, part.durationMs])).toEqual([[0, minimalWebm.byteLength, 1], [1, minimalWebm.byteLength, 2]])
+    expect(await Promise.all(parts.map((part) => readFile(join(targetRecordings, part.relativePath))))).toEqual([Buffer.from(minimalWebm), Buffer.from(minimalWebm)])
+    sourceDb.close(); targetDb.close()
+  })
+
   it('remaps IDs while preserving semantic content and a relative retained WebM', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nnote-archive-')); roots.push(root)
     const sourceRecordings = join(root, 'source-recordings'); const targetRecordings = join(root, 'target-recordings')

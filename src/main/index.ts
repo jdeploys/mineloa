@@ -57,6 +57,7 @@ if (verificationRequest !== null) {
         registerRecoveryHandlers(
           ipcMain,
           new RecoveryService(new MeetingRepository(database), recordingService, recordingsDirectory),
+          dialog,
         )
         const processingService = new ProcessingService(
           meetings,

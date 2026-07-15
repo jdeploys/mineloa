@@ -7,7 +7,7 @@ import type { SummaryTemplate } from '../../shared/contracts/template'
 import { DEFAULT_TEMPLATE_ID } from '../templates/defaultTemplate'
 import { parseArchive } from './archiveSchema'
 
-type ExportRepository = Pick<MeetingRepository, 'requireById' | 'listSpeakers' | 'listTranscript' | 'listSummarySections' | 'listActionItems'>
+type ExportRepository = Pick<MeetingRepository, 'requireById' | 'listSpeakers' | 'listTranscript' | 'listSummarySections' | 'listActionItems' | 'listRecordingParts'>
 type TemplateLookup = Pick<TemplateRepository, 'findById'>
 
 function isWithin(root: string, candidate: string): boolean {
@@ -36,10 +36,19 @@ export async function exportMeetingArchive(
   repository: ExportRepository,
   templates: TemplateLookup,
   recordingsDirectory: string,
-): Promise<{ bytes: Uint8Array; includedAudio: boolean; audioCoverage: 'none' | 'primary-part-only' }> {
+): Promise<{ bytes: Uint8Array; includedAudio: boolean; audioCoverage: 'none' | 'all-parts' }> {
   const meeting = repository.requireById(meetingId)
-  if (meeting.status === 'deleted') throw new Error('Deleted meetings cannot be exported')
-  const audio = meeting.audioPath === null ? null : await readRetainedAudio(recordingsDirectory, meeting.audioPath)
+  if (meeting.status !== 'recorded' && meeting.status !== 'completed') throw new Error('Only stable recorded or completed meetings can be exported')
+  const ownedParts = meeting.audioPath === null ? [] : repository.listRecordingParts(meetingId)
+  const partMetadata = ownedParts.length > 0
+    ? ownedParts
+    : meeting.audioPath === null ? [] : [{ meetingId, partIndex: 0, relativePath: meeting.audioPath, byteCount: meeting.audioByteCount, durationMs: meeting.durationMs }]
+  const audioParts = await Promise.all(partMetadata.map(async (part, index) => {
+    if (part.partIndex !== index) throw new Error('Recording part ownership is not contiguous')
+    const bytes = await readRetainedAudio(recordingsDirectory, part.relativePath)
+    if (bytes.byteLength !== part.byteCount) throw new Error('Recording part size does not match its ownership metadata')
+    return { ...part, bytes, entry: `audio/part-${index}.webm` }
+  }))
   const summarySections = repository.listSummarySections(meetingId)
   const existingTemplate = templates.findById(meeting.selectedTemplateId ?? DEFAULT_TEMPLATE_ID)
   const template = existingTemplate ?? (summarySections.length === 0 ? null : {
@@ -47,8 +56,11 @@ export async function exportMeetingArchive(
     sections: summarySections.map((section) => ({ id: section.templateSectionId, title: '요약 섹션', kind: section.kind, prompt: '가져온 요약 섹션' })),
     createdAt: meeting.createdAt, updatedAt: meeting.updatedAt,
   })
-  const payloadNames = ['meeting.json', 'transcript.json', 'summary.json', ...(audio === null ? [] : ['audio.webm'])]
-  const manifest = { format: 'nnote', version: 1, entries: payloadNames }
+  const payloadNames = ['meeting.json', 'transcript.json', 'summary.json', ...audioParts.map(({ entry }) => entry)]
+  const manifest = {
+    format: 'nnote', version: 2, entries: payloadNames,
+    audioParts: audioParts.map(({ partIndex, entry, byteCount, durationMs }) => ({ partIndex, entry, byteCount, durationMs })),
+  }
   const entries: Record<string, Uint8Array> = {
     'manifest.json': strToU8(JSON.stringify(manifest)),
     'meeting.json': strToU8(JSON.stringify({
@@ -65,8 +77,8 @@ export async function exportMeetingArchive(
       actionItems: repository.listActionItems(meetingId).map(({ id, content, assigneeSpeakerId, dueAt, completed }) => ({ id, content, assigneeSpeakerId, dueAt, completed })),
     })),
   }
-  if (audio !== null) entries['audio.webm'] = audio
+  for (const part of audioParts) entries[part.entry] = part.bytes
   const bytes = zipSync(entries, { level: 0 })
   parseArchive(bytes)
-  return { bytes, includedAudio: audio !== null, audioCoverage: audio === null ? 'none' : 'primary-part-only' }
+  return { bytes, includedAudio: audioParts.length > 0, audioCoverage: audioParts.length === 0 ? 'none' : 'all-parts' }
 }

@@ -3,6 +3,7 @@ import type { DesktopApi } from '../shared/contracts/desktopApi'
 import type { RecordingChunk } from '../shared/contracts/recording'
 import type { CreateTemplateInput, UpdateTemplateInput } from '../shared/contracts/template'
 import { ProcessingStatusSchema, type ProcessingStatus } from '../shared/contracts/processing'
+import { RecoveryExportResultSchema } from '../shared/contracts/recovery'
 import {
   CreateRecordingMeetingInputSchema,
   MeetingDocumentSchema,
@@ -32,7 +33,10 @@ const recording: DesktopApi['recording'] = Object.freeze({
 const recovery: DesktopApi['recovery'] = Object.freeze({
   scan: () => ipcRenderer.invoke('recovery:scan'),
   recover: (meetingId: string) => ipcRenderer.invoke('recovery:recover', meetingId),
+  suspend: (meetingId: string) => ipcRenderer.invoke('recovery:suspend', meetingId),
   keepAsFile: (meetingId: string) => ipcRenderer.invoke('recovery:keep-as-file', meetingId),
+  exportOnly: (meetingId: string) => ipcRenderer.invoke('recovery:export-only', meetingId)
+    .then((value) => RecoveryExportResultSchema.parse(value)),
   discard: (meetingId: string, options: { explicitDelete: true }) =>
     ipcRenderer.invoke('recovery:discard', meetingId, options),
 })

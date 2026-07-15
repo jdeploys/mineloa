@@ -64,8 +64,23 @@ describe('RecoveryService', () => {
     expect(h.meetings.requireById('interrupted').status).toBe('recoverable')
 
     const progress = await h.recovery.recover('interrupted')
-    expect(progress).toMatchObject({ activePartIndex: 0, nextChunkIndex: 1, totalBytes: 3 })
+    expect(progress).toMatchObject({ activePartIndex: 1, nextChunkIndex: 0, totalBytes: 3, rolledToPartIndex: 1 })
+    expect(readFileSync(completedPartPath(h.recordings, 'interrupted', 0))).toEqual(Buffer.from([1, 2, 3]))
     expect(h.meetings.requireById('interrupted').status).toBe('recording')
+    await h.recording.close()
+    h.database.close()
+  })
+
+  it('returns an attached recovery to recoverable when renderer microphone attachment fails', async () => {
+    const h = harness()
+    await interrupted(h, 'retryable')
+    await h.recovery.scan()
+    await h.recovery.recover('retryable')
+
+    await h.recovery.suspend('retryable')
+
+    expect(h.meetings.requireById('retryable').status).toBe('recoverable')
+    expect(await h.recovery.scan()).toEqual([expect.objectContaining({ meetingId: 'retryable', kind: 'recoverable' })])
     await h.recording.close()
     h.database.close()
   })
@@ -239,7 +254,20 @@ describe('RecoveryService', () => {
     expect(items).toEqual([expect.objectContaining({ meetingId: 'corrupt', kind: 'exportOnly', byteCount: 4 })])
     expect(readFileSync(pending)).toEqual(Buffer.from([4, 5, 6, 7]))
     await expect(h.recovery.recover('corrupt')).rejects.toThrow(/cannot be resumed/i)
+    const exported = join(h.root, 'recovered.webm')
+    await h.recovery.exportOnly('corrupt', exported)
+    expect(readFileSync(exported)).toEqual(Buffer.from([4, 5, 6, 7]))
     expect(readFileSync(pending)).toEqual(Buffer.from([4, 5, 6, 7]))
+    h.database.close()
+  })
+
+  it('does not export preserved bytes until scan authorizes an export-only recovery item', async () => {
+    const h = harness()
+    h.meetings.create(meeting('unscanned', 'recording'))
+    writeFileSync(pendingPartPath(h.recordings, 'unscanned', 0), Buffer.from([9]))
+
+    await expect(h.recovery.exportOnly('unscanned', join(h.root, 'no.webm'))).rejects.toThrow(/startup recovery/i)
+    expect(() => readFileSync(join(h.root, 'no.webm'))).toThrow()
     h.database.close()
   })
 

@@ -15,7 +15,7 @@ const documentFixture: MeetingDocument = { meeting, audioUrl: null, speakers: []
 
 function api(overrides: Partial<DesktopApi['meetings']> = {}): DesktopApi {
   return {
-    recovery: { scan: vi.fn(async () => []), recover: vi.fn(), keepAsFile: vi.fn(), discard: vi.fn() },
+    recovery: { scan: vi.fn(async () => []), recover: vi.fn(), suspend: vi.fn(), keepAsFile: vi.fn(), exportOnly: vi.fn(), discard: vi.fn() },
     meetings: {
       list: vi.fn(async () => [meeting]), get: vi.fn(async () => documentFixture),
       createRecording: vi.fn(async () => ({ ...meeting, id: 'recording-1', title: '새 회의', status: 'recording' })),

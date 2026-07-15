@@ -4,10 +4,12 @@ import { AudioPolicySchema, MeetingStatusSchema } from '../../shared/contracts/m
 import { SummaryTemplateSectionSchema } from '../../shared/contracts/template'
 
 export const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
-export const MAX_ARCHIVE_ENTRIES = 5
+export const MAX_AUDIO_PARTS = 128
+export const MAX_ARCHIVE_ENTRIES = 4 + MAX_AUDIO_PARTS
 export const MAX_COMPRESSION_RATIO = 100
 export const ARCHIVE_ENTRIES = ['manifest.json', 'meeting.json', 'transcript.json', 'summary.json', 'audio.webm'] as const
 const required = ARCHIVE_ENTRIES.slice(0, 4)
+const AUDIO_PART_ENTRY = /^audio\/part-(0|[1-9]\d*)\.webm$/
 
 export const ArchiveTemplateSchema = z.object({
   sourceId: z.string().min(1), name: z.string().min(1).max(200),
@@ -26,10 +28,21 @@ export const ArchiveSummarySchema = z.object({
   sections: z.array(z.object({ id: z.string().min(1), templateSectionId: z.string().uuid(), kind: z.enum(['paragraph', 'bullet_list', 'action_items']), text: z.string(), items: z.array(z.string()), orderIndex: z.number().int().nonnegative() }).strict()),
   actionItems: z.array(z.object({ id: z.string().min(1), content: z.string().min(1), assigneeSpeakerId: z.string().min(1).nullable(), dueAt: z.string().nullable(), completed: z.boolean() }).strict()),
 }).strict()
-export const ArchiveManifestSchema = z.object({
+export const ArchiveManifestV1Schema = z.object({
   format: z.literal('nnote'), version: z.literal(1),
   entries: z.array(z.enum(ARCHIVE_ENTRIES)).min(3).max(4),
 }).strict()
+export const ArchiveManifestV2Schema = z.object({
+  format: z.literal('nnote'), version: z.literal(2),
+  entries: z.array(z.string().min(1)).min(3).max(3 + MAX_AUDIO_PARTS),
+  audioParts: z.array(z.object({
+    partIndex: z.number().int().nonnegative(),
+    entry: z.string().regex(AUDIO_PART_ENTRY),
+    byteCount: z.number().int().nonnegative(),
+    durationMs: z.number().int().nonnegative(),
+  }).strict()).max(MAX_AUDIO_PARTS),
+}).strict()
+export const ArchiveManifestSchema = z.discriminatedUnion('version', [ArchiveManifestV1Schema, ArchiveManifestV2Schema])
 
 export type ParsedArchive = {
   manifest: z.infer<typeof ArchiveManifestSchema>
@@ -37,6 +50,7 @@ export type ParsedArchive = {
   transcript: z.infer<typeof ArchiveTranscriptSchema>
   summary: z.infer<typeof ArchiveSummarySchema>
   audio: Uint8Array | null
+  audioParts: Array<{ partIndex: number; entry: string; byteCount: number; durationMs: number; bytes: Uint8Array }>
 }
 
 type CentralEntry = { name: string; compressedSize: number; uncompressedSize: number; crc: number; externalAttributes: number; madeBy: number; flags: number }
@@ -171,7 +185,7 @@ export function parseArchive(bytes: Uint8Array): ParsedArchive {
     compressedTotal += entry.compressedSize
     if (entry.compressedSize > MAX_ARCHIVE_BYTES || entry.uncompressedSize > MAX_ARCHIVE_BYTES || total > MAX_ARCHIVE_BYTES) throw new Error('Archive entry exceeds 100MB')
     if ((entry.compressedSize === 0 && entry.uncompressedSize > 0) || (entry.compressedSize > 0 && entry.uncompressedSize / entry.compressedSize > MAX_COMPRESSION_RATIO)) throw new Error('Archive entry compression ratio exceeds 100:1')
-    if (!ARCHIVE_ENTRIES.includes(entry.name as typeof ARCHIVE_ENTRIES[number])) throw new Error(`Archive entry path is not allowed: ${entry.name}`)
+    if (!ARCHIVE_ENTRIES.includes(entry.name as typeof ARCHIVE_ENTRIES[number]) && !AUDIO_PART_ENTRY.test(entry.name)) throw new Error(`Archive entry path is not allowed: ${entry.name}`)
     const normalized = entry.name.normalize('NFKC').toLocaleLowerCase('en-US')
     if (names.has(normalized)) throw new Error('Archive contains duplicate entry names')
     names.add(normalized)
@@ -190,18 +204,37 @@ export function parseArchive(bytes: Uint8Array): ParsedArchive {
   }
   let rawManifest: unknown
   try { rawManifest = JSON.parse(strFromU8(files['manifest.json'])) } catch (error) { throw new Error('Invalid manifest.json JSON', { cause: error }) }
-  if (typeof rawManifest === 'object' && rawManifest !== null && 'version' in rawManifest && rawManifest.version !== 1) throw new Error('Unsupported archive version')
-  const manifest = ArchiveManifestSchema.parse(rawManifest)
+  if (typeof rawManifest === 'object' && rawManifest !== null && 'version' in rawManifest && rawManifest.version !== 1 && rawManifest.version !== 2) throw new Error('Unsupported archive version')
+  let manifest: z.infer<typeof ArchiveManifestSchema>
+  try { manifest = ArchiveManifestSchema.parse(rawManifest) }
+  catch (error) { throw new Error('Invalid archive manifest', { cause: error }) }
   const actualPayload = central.map((e) => e.name).filter((n) => n !== 'manifest.json').sort()
   if (JSON.stringify([...manifest.entries].sort()) !== JSON.stringify(actualPayload)) throw new Error('Archive manifest entries do not match ZIP entries')
-  const audio = files['audio.webm'] ?? null
-  if (audio !== null && !isWebm(audio)) throw new Error('Archive audio is not a structurally valid WebM')
+  const meeting = parseJson('meeting.json', files['meeting.json'], ArchiveMeetingSchema)
+  const audioParts = manifest.version === 1
+    ? (files['audio.webm'] === undefined ? [] : [{ partIndex: 0, entry: 'audio.webm', byteCount: files['audio.webm'].byteLength, durationMs: meeting.durationMs, bytes: files['audio.webm'] }])
+    : manifest.audioParts.map((part, index) => {
+      if (part.partIndex !== index || part.entry !== `audio/part-${index}.webm`) throw new Error('Archive audio parts must be contiguous and canonically named')
+      if (part.durationMs > meeting.durationMs || (index > 0 && part.durationMs < manifest.audioParts[index - 1]!.durationMs)) {
+        throw new Error('Archive audio part duration cursors are not ordered')
+      }
+      const bytes = files[part.entry]
+      if (bytes === undefined || bytes.byteLength !== part.byteCount) throw new Error('Archive audio part size does not match its manifest')
+      return { ...part, bytes }
+    })
+  if (manifest.version === 2) {
+    const audioEntries = actualPayload.filter((entry) => AUDIO_PART_ENTRY.test(entry))
+    if (audioEntries.length !== audioParts.length) throw new Error('Archive audio part manifest does not match ZIP entries')
+  }
+  for (const part of audioParts) if (!isWebm(part.bytes)) throw new Error('Archive audio is not a structurally valid WebM')
+  const audio = audioParts[0]?.bytes ?? null
   const parsed = {
     manifest,
-    meeting: parseJson('meeting.json', files['meeting.json'], ArchiveMeetingSchema),
+    meeting,
     transcript: parseJson('transcript.json', files['transcript.json'], ArchiveTranscriptSchema),
     summary: parseJson('summary.json', files['summary.json'], ArchiveSummarySchema),
     audio,
+    audioParts,
   }
   validateSemantics(parsed)
   return parsed

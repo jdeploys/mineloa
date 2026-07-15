@@ -1,5 +1,5 @@
-import { readdir, rm, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { lstat, open, readdir, rename, rm, stat } from 'node:fs/promises'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { MeetingRepository } from '../db/meetingRepository'
 import type { RecoveryItem } from '../../shared/contracts/recovery'
 import type { RecordingProgress } from '../../shared/contracts/recording'
@@ -60,11 +60,15 @@ export class RecoveryService {
 
     this.meetings.transitionRecordingStatus(meetingId, 'recording')
     try {
-      const progress = await this.recording.start(meetingId)
+      const started = await this.recording.start(meetingId)
+      const progress = started.nextChunkIndex > 0
+        ? await this.recording.rollPart(meetingId, started.activePartIndex)
+        : started
       this.inspected.delete(meetingId)
       this.resolved.add(meetingId)
       return progress
     } catch (error) {
+      await this.recording.suspendRecovery(meetingId).catch(() => undefined)
       this.meetings.transitionRecordingStatus(meetingId, 'recoverable')
       throw error
     }
@@ -82,6 +86,68 @@ export class RecoveryService {
     if (inspection.kind === 'exportOnly') throw new Error('This recording is export-only')
     await this.recording.keepRecoveredAsFile(meetingId)
     this.inspected.delete(meetingId)
+  }
+
+  async suspend(meetingId: string): Promise<void> {
+    const meeting = this.meetings.requireById(meetingId)
+    if (meeting.status !== 'recording' || !this.resolved.has(meetingId)) {
+      throw new Error('Only the currently attached startup recovery can be suspended')
+    }
+    await this.recording.suspendRecovery(meetingId)
+    this.meetings.transitionRecordingStatus(meetingId, 'recoverable')
+    this.resolved.delete(meetingId)
+    this.inspected.set(meetingId, 'recoverable')
+  }
+
+  async exportOnly(meetingId: string, destinationPath: string): Promise<void> {
+    this.requireStartupRecovery(meetingId, 'exportOnly')
+    if (!isAbsolute(destinationPath)) throw new Error('Recovery export destination must be absolute')
+    const recordingsRoot = resolve(this.recordingsDirectory)
+    const destination = resolve(destinationPath)
+    const fromRoot = relative(recordingsRoot, destination)
+    if (fromRoot === '' || (!fromRoot.startsWith('..') && !isAbsolute(fromRoot))) {
+      throw new Error('Recovery export cannot overwrite preserved recording storage')
+    }
+    const prefix = recordingFilePrefix(meetingId)
+    const entries = (await readdir(this.recordingsDirectory))
+      .filter((entry) => entry.startsWith(prefix) && (entry.endsWith('.webm') || entry.endsWith('.webm.part')))
+      .map((entry) => {
+        const match = entry.match(/\.part-(\d+)\.webm(?:\.part)?$/)
+        if (match === null) throw new Error('Preserved recording part has an invalid name')
+        return { entry, partIndex: Number(match[1]), pending: entry.endsWith('.webm.part') }
+      })
+      .sort((left, right) => left.partIndex - right.partIndex || Number(left.pending) - Number(right.pending))
+    if (entries.length === 0) throw new Error('No preserved recording bytes are available')
+    if (new Set(entries.map(({ partIndex }) => partIndex)).size !== entries.length) throw new Error('Preserved recording part topology is ambiguous')
+
+    const temporary = `${destination}.${process.pid}.${Date.now()}.tmp`
+    const output = await open(temporary, 'wx')
+    try {
+      for (const { entry } of entries) {
+        const source = join(this.recordingsDirectory, entry)
+        const info = await lstat(source)
+        if (!info.isFile() || info.isSymbolicLink()) throw new Error('Preserved recording part must be a regular file')
+        const input = await open(source, 'r')
+        try {
+          const buffer = Buffer.allocUnsafe(64 * 1024)
+          let position = 0
+          while (position < info.size) {
+            const { bytesRead } = await input.read(buffer, 0, Math.min(buffer.length, info.size - position), position)
+            if (bytesRead === 0) throw new Error('Preserved recording part changed during export')
+            await output.write(buffer.subarray(0, bytesRead))
+            position += bytesRead
+          }
+          if ((await input.stat()).size !== info.size) throw new Error('Preserved recording part changed during export')
+        } finally { await input.close() }
+      }
+      await output.sync()
+      await output.close()
+      await rename(temporary, destination)
+    } catch (error) {
+      await output.close().catch(() => undefined)
+      await rm(temporary, { force: true }).catch(() => undefined)
+      throw error
+    }
   }
 
   async discard(meetingId: string, options: { explicitDelete: boolean }): Promise<void> {
