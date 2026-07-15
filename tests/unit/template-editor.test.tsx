@@ -21,6 +21,7 @@ describe('TemplateEditor', () => {
     const custom = { ...defaultTemplate, id: 'custom', name: '사용자', isDefault: false as const, sections: [defaultTemplate.sections[0]!, { id: '10000000-0000-4000-8000-000000000002', title: '할 일', kind: 'action_items' as const, prompt: '할 일' }] }
     const api = { list: vi.fn().mockResolvedValue([defaultTemplate, custom]), create: vi.fn(), update: vi.fn().mockResolvedValue({ ...custom, name: '새 이름' }), reorderSections: vi.fn().mockResolvedValue(custom), delete: vi.fn() } satisfies TemplatesApi
     render(<TemplateEditor templates={api} />)
+    expect(await screen.findByRole('navigation', { name: '템플릿 목록' })).toHaveClass('template-list')
     await user.click(await screen.findByRole('button', { name: '사용자' }))
     await user.clear(screen.getByLabelText('템플릿 이름'))
     await user.type(screen.getByLabelText('템플릿 이름'), '새 이름')

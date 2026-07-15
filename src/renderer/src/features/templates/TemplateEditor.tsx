@@ -116,16 +116,16 @@ export function TemplateEditor({ templates: api }: TemplateEditorProps) {
     }
   }
 
-  return <section aria-label="요약 템플릿">
-    <nav aria-label="템플릿 목록">
+  return <section className="template-layout" aria-label="요약 템플릿">
+    <nav className="template-list" aria-label="템플릿 목록">
       {items.map((template) => <button key={template.id} type="button" onClick={() => setSelectedId(template.id)}>{template.name}</button>)}
       <button type="button" onClick={createTemplate}>새 템플릿</button>
     </nav>
     {error && <p role="alert">{error}</p>}
-    {selected?.isDefault ? <p>기본 템플릿은 수정하거나 삭제할 수 없습니다.</p> : selected ? <div>
+    {selected?.isDefault ? <p className="template-lock">기본 템플릿은 수정하거나 삭제할 수 없습니다.</p> : selected ? <div className="template-editor">
       <label>템플릿 이름 <input aria-label="템플릿 이름" value={name} onChange={(event) => setName(event.target.value)} /></label>
       <button type="button" onClick={saveName}>이름 저장</button>
-      <ol>{sections.map((section, index) => <li key={section.id}>
+      <ol>{sections.map((section, index) => <li className="template-section-card" key={section.id}>
         <label>섹션 {index + 1} 제목 <input aria-label={`섹션 ${index + 1} 제목`} value={section.title} onChange={(event) => updateSection(index, { title: event.target.value })} /></label>
         <label>종류 <select aria-label={`섹션 ${index + 1} 종류`} value={section.kind} onChange={(event) => updateSection(index, { kind: event.target.value as TemplateSectionKind })}><option value="paragraph">문단</option><option value="bullet_list">목록</option><option value="action_items" disabled={sections.some((candidate, position) => position !== index && candidate.kind === 'action_items')}>할 일</option></select></label>
         <label>지시문 <textarea aria-label={`섹션 ${index + 1} 지시문`} value={section.prompt} onChange={(event) => updateSection(index, { prompt: event.target.value })} /></label>

@@ -206,12 +206,12 @@ export function App({
       archive={desktopApi.archive}
       onRefresh={refreshOpenMeeting}
     />}
-    {screen === 'settings' && <main className="document-shell">
+    {screen === 'settings' && <main className="document-shell settings-page">
       <button className="back-button" onClick={backToAll}>← 전체 기록</button>
       <h1 ref={routeHeading} tabIndex={-1}>설정</h1>
       <ApiKeySettings settings={desktopApi.settings} />
     </main>}
-    {screen === 'templates' && <main className="document-shell">
+    {screen === 'templates' && <main className="document-shell template-page">
       <button className="back-button" onClick={backToAll}>← 전체 기록</button>
       <h1 ref={routeHeading} tabIndex={-1}>요약 템플릿</h1>
       <TemplateEditor templates={desktopApi.templates} />

@@ -46,6 +46,7 @@ describe('API key settings', () => {
     }
 
     render(<ApiKeySettings settings={settings} />)
+    expect(await screen.findByRole('region', { name: 'API key settings' })).toHaveClass('settings-panel')
     await screen.findByText('Not configured')
 
     await user.type(screen.getByLabelText('OpenAI API key'), 'sk-secret-value')

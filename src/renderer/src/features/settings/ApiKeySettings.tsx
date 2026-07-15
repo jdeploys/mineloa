@@ -81,11 +81,13 @@ export function ApiKeySettings({ settings }: ApiKeySettingsProps) {
   }
 
   return (
-    <section aria-labelledby="api-key-settings-title">
-      <h2 id="api-key-settings-title">API key settings</h2>
-      <p>{status === null ? 'Status unavailable' : status.configured ? 'Configured' : 'Not configured'}</p>
-      {status?.lastValidatedAt ? <p>Last validated: {status.lastValidatedAt}</p> : null}
-      <form onSubmit={save}>
+    <section className="settings-panel" aria-labelledby="api-key-settings-title">
+      <div className="settings-heading">
+        <div><p className="eyebrow">OPENAI</p><h2 id="api-key-settings-title">API key settings</h2></div>
+        <span className="credential-status">{status === null ? 'Status unavailable' : status.configured ? 'Configured' : 'Not configured'}</span>
+      </div>
+      {status?.lastValidatedAt ? <p className="settings-meta">Last validated: {status.lastValidatedAt}</p> : null}
+      <form className="credential-form" onSubmit={save}>
         <label htmlFor="openai-api-key">OpenAI API key</label>
         <input
           id="openai-api-key"
@@ -98,9 +100,7 @@ export function ApiKeySettings({ settings }: ApiKeySettingsProps) {
           Save API key
         </button>
       </form>
-      <button type="button" disabled={busy || !status?.configured} onClick={remove}>
-        Delete API key
-      </button>
+      <div className="danger-zone"><div><strong>저장된 API 키 삭제</strong><p>이 기기의 보안 저장소에서만 제거합니다.</p></div><button className="button-danger" type="button" disabled={busy || !status?.configured} onClick={remove}>Delete API key</button></div>
       {error ? <p role="alert">{error}</p> : null}
     </section>
   )
