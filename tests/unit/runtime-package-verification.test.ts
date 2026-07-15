@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -30,7 +30,7 @@ function mach(cpuType: number): Buffer {
 }
 
 async function payload(platform: 'win32' | 'darwin' = 'win32', arch = 'x64', helperContents = pe()) {
-  const resourcesPath = await mkdtemp(join(tmpdir(), 'nnote-packaged-runtime-'))
+  const resourcesPath = await realpath(await mkdtemp(join(tmpdir(), 'nnote-packaged-runtime-')))
   roots.push(resourcesPath)
   const directory = join(resourcesPath, 'local-runtime', `${platform}-${arch}`)
   await mkdir(directory, { recursive: true })

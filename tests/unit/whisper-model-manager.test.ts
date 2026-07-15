@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rename as renameFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rename as renameFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   NodeWhisperModelStorage,
@@ -75,7 +75,7 @@ function response(status: number, sizes: number[], headers: Record<string, strin
 }
 
 function setup(modelId: 'base' | 'small' = 'base') {
-  const root = 'C:\\owned\\models'
+  const root = resolve('owned', 'models')
   const storage = new MemoryStorage()
   storage.nextDigest = WHISPER_MODELS[modelId].sha256
   const fetch = vi.fn().mockResolvedValue(response(200, [WHISPER_MODELS[modelId].size]))
@@ -366,7 +366,7 @@ describe('NodeWhisperModelStorage secure file handles', () => {
   })
 
   async function temporaryRoot() {
-    const parent = await mkdtemp(join(tmpdir(), 'nnote-whisper-storage-'))
+    const parent = await realpath(await mkdtemp(join(tmpdir(), 'nnote-whisper-storage-')))
     roots.push(parent)
     const root = join(parent, 'owned')
     const storage = new NodeWhisperModelStorage()

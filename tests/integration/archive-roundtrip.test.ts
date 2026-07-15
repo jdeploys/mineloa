@@ -122,7 +122,7 @@ describe('Nnote archive round trip', () => {
     targetDb.exec("CREATE TRIGGER reject_import BEFORE INSERT ON meetings BEGIN SELECT RAISE(ABORT, 'forced'); END")
     await expect(importMeetingArchive(exported.bytes, targetDb, targetRecordings)).rejects.toThrow(/forced/)
     expect(targetDb.prepare('SELECT count(*) count FROM meetings').get()).toEqual({ count: 0 })
-    expect((await import('node:fs/promises')).readdir(targetRecordings)).resolves.toEqual([])
+    await expect((await import('node:fs/promises')).readdir(targetRecordings)).resolves.toEqual([])
     sourceDb.close(); targetDb.close()
   })
 

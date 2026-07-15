@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -8,7 +8,7 @@ import { createOwnedProcessRunner } from '../../src/main/process/runOwnedProcess
 const roots: string[] = []
 
 async function root() {
-  const value = await mkdtemp(join(tmpdir(), 'nnote-codex-resolver-'))
+  const value = await realpath(await mkdtemp(join(tmpdir(), 'nnote-codex-resolver-')))
   roots.push(value)
   return value
 }

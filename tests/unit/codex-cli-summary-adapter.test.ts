@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { PassThrough, Writable } from 'node:stream'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -27,7 +27,7 @@ const resolveCodex = async () => [{ command: 'codex', argsPrefix: [] as string[]
 const temporaryRoots: string[] = []
 
 async function temporaryRoot() {
-  const root = await mkdtemp(join(tmpdir(), 'nnote-codex-test-'))
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'nnote-codex-test-')))
   temporaryRoots.push(root)
   return root
 }
@@ -42,6 +42,25 @@ function result(overrides: Partial<OwnedProcessResult> = {}): OwnedProcessResult
 }
 
 describe('CodexCliSummaryAdapter', () => {
+  it('uses the canonical temporary root when the supplied root is an operating-system alias', async (context) => {
+    const parent = await temporaryRoot()
+    const target = join(parent, 'target')
+    const alias = join(parent, 'alias')
+    await mkdir(target)
+    try { await symlink(target, alias, process.platform === 'win32' ? 'junction' : 'dir') } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EPERM') { context.skip(); return }
+      throw error
+    }
+    const adapter = new CodexCliSummaryAdapter(async ({ cwd }) => {
+      await writeFile(join(cwd, 'result.json'), JSON.stringify(validSummary), 'utf8')
+      return result()
+    }, alias, resolveCodex)
+
+    await expect(adapter.summarize({ input: 'transcript', schema }))
+      .resolves.toBe(JSON.stringify(validSummary))
+    await expect(readdir(target)).resolves.toEqual([])
+  })
+
   it('runs codex in an isolated ephemeral read-only job and returns only schema-valid JSON', async () => {
     const root = await temporaryRoot()
     const run = vi.fn(async (request: { cwd: string }) => {

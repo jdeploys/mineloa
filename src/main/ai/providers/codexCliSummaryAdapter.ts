@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { OwnedProcessRequest, OwnedProcessResult } from '../../process/runOwnedProcess'
 import {
@@ -84,7 +84,8 @@ export class CodexCliSummaryAdapter implements SummaryProvider {
     let ownedDirectory: string | undefined
     let operationFailed = false
     try {
-      ownedDirectory = await this.files.mkdtemp(join(this.temporaryRoot, 'nnote-codex-summary-'))
+      const canonicalTemporaryRoot = await realpath(this.temporaryRoot)
+      ownedDirectory = await this.files.mkdtemp(join(canonicalTemporaryRoot, 'nnote-codex-summary-'))
       await this.files.writeFile(join(ownedDirectory, 'schema.json'), JSON.stringify(request.schema), 'utf8')
       const processResult = await this.runResolvedCommand({
         args: [

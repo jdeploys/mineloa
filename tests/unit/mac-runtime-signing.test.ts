@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -12,7 +12,7 @@ const roots: string[] = []
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))))
 
 async function fixture() {
-  const appOutDir = await mkdtemp(join(tmpdir(), 'nnote-sign-order-'))
+  const appOutDir = await realpath(await mkdtemp(join(tmpdir(), 'nnote-sign-order-')))
   roots.push(appOutDir)
   const runtime = join(appOutDir, 'Nnote.app', 'Contents', 'Resources', 'local-runtime', 'darwin-arm64')
   await mkdir(runtime, { recursive: true })

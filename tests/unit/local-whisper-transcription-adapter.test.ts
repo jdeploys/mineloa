@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -15,7 +15,7 @@ afterEach(async () => {
 })
 
 async function root(prefix: string): Promise<string> {
-  const path = await mkdtemp(join(tmpdir(), prefix))
+  const path = await realpath(await mkdtemp(join(tmpdir(), prefix)))
   roots.push(path)
   return path
 }
