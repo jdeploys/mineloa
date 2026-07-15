@@ -75,6 +75,10 @@
     },
     "mac": {
       "icon": "build/icons/icon.icns",
+      "signIgnore": [
+        "/Contents/Resources/local-runtime/darwin-(?:x64|arm64)/whisper-cli$",
+        "/Contents/Resources/local-runtime/darwin-(?:x64|arm64)/ffmpeg$"
+      ],
       "extraResources": [
         {
           "from": "build/local-runtime/darwin-${arch}",

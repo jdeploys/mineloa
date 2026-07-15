@@ -116,12 +116,32 @@ describe('release package configuration', () => {
     const helperHook = readFileSync(resolve('scripts/after-pack.mjs'), 'utf8')
     const appHook = readFileSync(resolve('scripts/after-sign.mjs'), 'utf8')
     expect(manifest.build.mac.hardenedRuntime).toBe(true)
+    expect(manifest.build.mac.signIgnore).toEqual([
+      '/Contents/Resources/local-runtime/darwin-(?:x64|arm64)/whisper-cli$',
+      '/Contents/Resources/local-runtime/darwin-(?:x64|arm64)/ffmpeg$',
+    ])
     expect(workflow).toContain('--config.mac.hardenedRuntime=false')
     expect(workflow).toContain('MAC_CSC_NAME')
     expect(workflow).toContain('TeamIdentifier')
     expect(workflow).toContain('DEVELOPER ID SIGNED; UNNOTARIZED')
     expect(helperHook).toContain("identity === '-' ? [] : ['--options', 'runtime', '--timestamp']")
     expect(appHook).not.toContain("'--options', 'runtime'")
+    expect(appHook).not.toContain("'--deep'")
     expect(workflow).toMatch(/grep -E .+Mach-O 64-bit executable/)
+  })
+
+  it('uses state-neutral release copy for macOS signing diagnostics', () => {
+    const workflow = readFileSync(resolve('.github/workflows/release.yml'), 'utf8')
+    expect(workflow).toContain('macOS signing and notarization state is reported by attached workflow diagnostics')
+    expect(workflow).not.toContain('macOS artifacts are ad-hoc signed and unnotarized unless')
+  })
+
+  it('uses electron-builder supported signIgnore regex semantics', () => {
+    const schema = JSON.parse(readFileSync(resolve('node_modules/app-builder-lib/scheme.json'), 'utf8'))
+    const macSchema = schema.definitions.MacConfiguration.properties.signIgnore
+    expect(macSchema.description).toContain('Regex')
+    const installedHelper = readFileSync(resolve('node_modules/app-builder-lib/out/mac/MacTargetHelper.js'), 'utf8')
+    expect(installedHelper).toContain('new RegExp(it)')
+    expect(installedHelper).toContain('regExp.test(file)')
   })
 })

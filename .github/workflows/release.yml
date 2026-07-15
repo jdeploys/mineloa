@@ -206,4 +206,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload v0.0.1 --clobber release-assets/Nnote-0.0.1-windows-x64.exe release-assets/Nnote-0.0.1-macos-x64.dmg release-assets/Nnote-0.0.1-macos-arm64.dmg release-assets/SHA256SUMS.txt --repo "${{ github.repository }}"
-          gh release edit v0.0.1 --repo "${{ github.repository }}" --prerelease --title "Nnote 0.0.1" --notes "Nnote desktop prerelease. macOS artifacts are ad-hoc signed and unnotarized unless the workflow signature diagnostics explicitly report NOTARIZATION VERIFIED; Gatekeeper may warn otherwise."
+          gh release edit v0.0.1 --repo "${{ github.repository }}" --prerelease --title "Nnote 0.0.1" --notes "Nnote desktop prerelease. macOS signing and notarization state is reported by attached workflow diagnostics; Gatekeeper may warn for unnotarized builds."
