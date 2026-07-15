@@ -84,7 +84,7 @@ describe('release package configuration', () => {
   })
 
   it('pins actions, limits permissions, and keeps secrets in the mac package step', () => {
-    const workflow = readFileSync(resolve('.github/workflows/release.yml'), 'utf8')
+    const workflow = readFileSync(resolve('.github/workflows/release.yml'), 'utf8').replace(/\r\n/g, '\n')
     expect(workflow).toContain('permissions:\n  contents: read')
     expect(workflow).toMatch(/release:\n(?:.|\n)*?permissions:\n\s+contents: write/)
     expect(workflow).not.toMatch(/uses:\s+[^\s]+@(?![a-f0-9]{40}(?:\s+#|\s*$))/m)
