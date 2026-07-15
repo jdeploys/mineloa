@@ -73,6 +73,7 @@ describe('OpenAI credential settings', () => {
       store,
       { validate },
       processingSettings,
+      { descriptors: async () => [] },
       () => new Date('2026-07-14T01:02:03.000Z'),
     )
 
@@ -103,6 +104,7 @@ describe('OpenAI credential settings', () => {
       store,
       { validate: vi.fn().mockRejectedValue(new Error('Invalid API key')) },
       processingSettings,
+      { descriptors: async () => [] },
     )
 
     await expect(handlers.get('settings:save-api-key')?.({}, 'sk-invalid')).rejects.toThrow(

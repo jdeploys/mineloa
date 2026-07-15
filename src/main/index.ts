@@ -61,7 +61,6 @@ if (verificationRequest !== null) {
           credentialStore,
           new OpenAiKeyValidator(),
           processingSettings,
-          undefined,
           registry,
         )
         const recordingService = new RecordingService(meetings, recordingsDirectory)

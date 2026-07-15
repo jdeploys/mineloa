@@ -83,7 +83,7 @@ describe('ProviderRegistry', () => {
     ])
   })
 
-  it('exposes registry descriptors through the settings IPC boundary', async () => {
+  it('always registers the settings descriptor handler from its required dependency', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const registry = createRegistry()
     registerSettingsHandlers(
@@ -94,10 +94,10 @@ describe('ProviderRegistry', () => {
         get: () => ({ transcriptionProvider: 'openai', summaryProvider: 'openai', localWhisperModel: 'base' }),
         update: (input) => input,
       },
-      undefined,
       registry,
     )
 
+    expect(handlers.has('settings:list-processing-provider-descriptors')).toBe(true)
     await expect(handlers.get('settings:list-processing-provider-descriptors')?.({}))
       .resolves.toEqual([
         descriptor('openai', 'transcription'),

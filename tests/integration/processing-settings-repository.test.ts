@@ -77,6 +77,7 @@ describe('processing settings repository', () => {
       { get: async () => null, set: async () => undefined, delete: async () => undefined },
       { validate: async () => undefined },
       settings,
+      { descriptors: async () => [] },
     )
 
     await expect(handlers.get('settings:update-processing-providers')?.({}, {

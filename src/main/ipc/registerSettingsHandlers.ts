@@ -20,8 +20,8 @@ export function registerSettingsHandlers(
   credentials: CredentialStore,
   validator: KeyValidator,
   processingSettings: ProcessingSettings,
+  processingProviders: ProcessingProviders,
   now: () => Date = () => new Date(),
-  processingProviders?: ProcessingProviders,
 ): void {
   let lastValidatedAt: string | null = null
 
@@ -51,9 +51,7 @@ export function registerSettingsHandlers(
     processingSettings.update(ProcessingProviderSettingsSchema.parse(input))
   ))
 
-  if (processingProviders !== undefined) {
-    ipcMain.handle('settings:list-processing-provider-descriptors', async () => (
-      processingProviders.descriptors()
-    ))
-  }
+  ipcMain.handle('settings:list-processing-provider-descriptors', async () => (
+    processingProviders.descriptors()
+  ))
 }
