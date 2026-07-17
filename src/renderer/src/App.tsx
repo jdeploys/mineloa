@@ -86,7 +86,7 @@ export function App({
     if (key === null) return
     documentQuery(`[data-focus-key="${key.replace(/["\\]/g, '')}"]`)?.focus()
     returnFocusKey.current = null
-  }, [screen, document])
+  }, [screen])
 
   const recordingControls = useMemo(() => ({
     start: async (options?: { selectedTemplateId: string; audioPolicy: AudioPolicy }) => {

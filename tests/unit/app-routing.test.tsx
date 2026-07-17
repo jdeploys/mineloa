@@ -43,6 +43,7 @@ describe('App route and recording ownership', () => {
   beforeEach(() => vi.stubGlobal('scrollTo', vi.fn()))
   afterEach(() => {
     cleanup()
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
@@ -125,24 +126,19 @@ describe('App route and recording ownership', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /제품 회의/ })).toHaveFocus())
   })
 
-  it('focuses settings and template route headings', async () => {
-    const user = userEvent.setup()
-    render(<App desktopApi={api()} recordingController={{ start: vi.fn(), stop: vi.fn(), discard: vi.fn() }} />)
-    await user.click(await screen.findByRole('button', { name: '설정' }))
-    expect(screen.getByRole('heading', { name: '설정' })).toHaveFocus()
-    await user.click(screen.getByRole('button', { name: '← 전체 기록' }))
-    await user.click(screen.getByRole('button', { name: '요약 템플릿' }))
-    expect(screen.getByRole('heading', { name: '요약 템플릿' })).toHaveFocus()
-  })
-
-  it('moves every secondary route to the visible page top while keeping heading focus', async () => {
+  it('moves the settings route to the visible page top and focuses its heading without scrolling it', async () => {
     const user = userEvent.setup()
     const scrollTo = vi.fn()
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
     vi.stubGlobal('scrollTo', scrollTo)
     render(<App desktopApi={api()} recordingController={{ start: vi.fn(), stop: vi.fn(), discard: vi.fn() }} />)
     await user.click(await screen.findByRole('button', { name: '설정' }))
+    const heading = screen.getByRole('heading', { name: '설정' })
+
+    expect(scrollTo).toHaveBeenCalledTimes(1)
     expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' })
-    expect(screen.getByRole('heading', { name: '설정' })).toHaveFocus()
+    expect(focus.mock.calls.find((_call, index) => focus.mock.contexts[index] === heading)).toEqual([{ preventScroll: true }])
+    expect(heading).toHaveFocus()
 
     const navigation = screen.getByRole('navigation', { name: '주요 메뉴' })
     expect(navigation).toBeVisible()
@@ -150,6 +146,36 @@ describe('App route and recording ownership', () => {
     expect(screen.getByRole('button', { name: '설정' })).toHaveAttribute('data-focus-key', 'nav-settings')
     expect(screen.getByRole('button', { name: '요약 템플릿' })).toHaveAttribute('data-focus-key', 'nav-templates')
     expect(screen.getByRole('button', { name: '.nnote 가져오기' })).toHaveClass('nav-import')
+  })
+
+  it('moves the templates route to the visible page top and focuses its heading without scrolling it', async () => {
+    const user = userEvent.setup()
+    const scrollTo = vi.fn()
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    vi.stubGlobal('scrollTo', scrollTo)
+    render(<App desktopApi={api()} recordingController={{ start: vi.fn(), stop: vi.fn(), discard: vi.fn() }} />)
+    await user.click(await screen.findByRole('button', { name: '요약 템플릿' }))
+    const heading = screen.getByRole('heading', { name: '요약 템플릿' })
+
+    expect(scrollTo).toHaveBeenCalledTimes(1)
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' })
+    expect(focus.mock.calls.find((_call, index) => focus.mock.contexts[index] === heading)).toEqual([{ preventScroll: true }])
+    expect(heading).toHaveFocus()
+  })
+
+  it('moves the detail route to the visible page top and focuses its heading without scrolling it', async () => {
+    const user = userEvent.setup()
+    const scrollTo = vi.fn()
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    vi.stubGlobal('scrollTo', scrollTo)
+    render(<App desktopApi={api()} recordingController={{ start: vi.fn(), stop: vi.fn(), discard: vi.fn() }} />)
+    await user.click(await screen.findByRole('button', { name: /제품 회의/ }))
+    const heading = await screen.findByRole('heading', { name: '제품 회의' })
+
+    expect(scrollTo).toHaveBeenCalledTimes(1)
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' })
+    expect(focus.mock.calls.find((_call, index) => focus.mock.contexts[index] === heading)).toEqual([{ preventScroll: true }])
+    expect(heading).toHaveFocus()
   })
 
   it('keeps one recording instance alive when the shared top navigation changes routes', async () => {
@@ -178,6 +204,36 @@ describe('App route and recording ownership', () => {
     await waitFor(() => expect(desktopApi.meetings.get).toHaveBeenCalledTimes(2))
     expect(screen.getByRole('button', { name: '.nnote 내보내기' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Markdown 내보내기' })).toBeVisible()
+  })
+
+  it('does not reset scroll or heading focus when a detail document refreshes in place', async () => {
+    const user = userEvent.setup()
+    const scrollTo = vi.fn()
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    const recorded = { ...meeting, status: 'recorded' as const }
+    const recordedDocument = { ...documentFixture, meeting: recorded }
+    const refreshedDocument = { ...recordedDocument, summarySections: recordedDocument.summarySections.slice() }
+    const desktopApi = api({
+      list: vi.fn(async () => [recorded]),
+      get: vi.fn()
+        .mockResolvedValueOnce(recordedDocument)
+        .mockResolvedValueOnce(refreshedDocument),
+    })
+    vi.mocked(desktopApi.processing.getStatus).mockResolvedValue({ meetingId: recorded.id, state: 'recorded', failedStage: null, retryable: false, audioRequired: true, error: null })
+    vi.mocked(desktopApi.processing.process).mockResolvedValue({ meetingId: recorded.id, state: 'completed', failedStage: null, retryable: false, audioRequired: false, error: null })
+    vi.stubGlobal('scrollTo', scrollTo)
+    render(<App desktopApi={desktopApi} recordingController={{ start: vi.fn(), stop: vi.fn(), discard: vi.fn() }} />)
+
+    await user.click(await screen.findByRole('button', { name: /제품 회의/ }))
+    const heading = await screen.findByRole('heading', { name: '제품 회의' })
+    const entryScrollCount = scrollTo.mock.calls.length
+    const entryFocusCount = focus.mock.contexts.filter((context) => context === heading).length
+
+    await user.click(await screen.findByRole('button', { name: '전사 및 요약 시작' }))
+    await waitFor(() => expect(desktopApi.meetings.get).toHaveBeenCalledTimes(2))
+
+    expect(scrollTo).toHaveBeenCalledTimes(entryScrollCount)
+    expect(focus.mock.contexts.filter((context) => context === heading)).toHaveLength(entryFocusCount)
   })
 
   it('imports a .nnote from the dashboard and opens the imported meeting', async () => {
