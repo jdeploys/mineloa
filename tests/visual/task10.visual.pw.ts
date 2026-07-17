@@ -19,7 +19,7 @@ async function openRoute(page: Page, state: string, theme: FixtureTheme = 'light
 
   if (state === 'active') await page.getByRole('button', { name: '녹음 시작' }).click()
   if (state === 'completed') await page.getByRole('button', { name: /제품 방향성 회의/ }).click()
-  if (state === 'templates') await page.getByRole('button', { name: '요약 템플릿' }).click()
+  if (state.startsWith('templates')) await page.getByRole('button', { name: '요약 템플릿' }).click()
   if (state === 'settings' || state.startsWith('provider-') || state.startsWith('whisper-') || state.startsWith('codex-')) {
     await page.getByRole('button', { name: '설정', exact: true }).click()
   }
@@ -31,6 +31,16 @@ async function openRoute(page: Page, state: string, theme: FixtureTheme = 'light
 
 async function expectNoHorizontalOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+}
+
+async function expectControlLabelUnclipped(page: Page, label: string) {
+  const control = page.getByRole('button', { name: label })
+  await control.scrollIntoViewIfNeeded()
+  await expect(control).toBeInViewport()
+  expect(await control.evaluate((element) => ({
+    horizontal: element.scrollWidth <= element.clientWidth,
+    vertical: element.scrollHeight <= element.clientHeight,
+  }))).toEqual({ horizontal: true, vertical: true })
 }
 
 async function expectFirstPairOrientation(page: Page, selector: string, orientation: 'row' | 'column') {
@@ -160,6 +170,31 @@ test('real template route resets scroll and keeps its heading and save action in
   await expect(page.getByRole('button', { name: '템플릿 저장' })).toBeInViewport()
   await expect(page).toHaveScreenshot('templates-light.png', { animations: 'disabled', fullPage: false, omitBackground: false })
 })
+
+for (const width of [1200, 640]) {
+  test(`real pending operation labels remain unclipped without overflow at ${width}x800`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    for (const operation of [
+      { state: 'templates-create-pending', trigger: () => page.getByRole('button', { name: '새 템플릿' }), label: '생성 중…' },
+      { state: 'templates-save-pending', trigger: () => page.getByRole('button', { name: '템플릿 저장' }), label: '저장 중…' },
+      { state: 'templates-reorder-pending', trigger: () => page.getByRole('button', { name: '위로 이동' }).nth(1), label: '정렬 중…' },
+      { state: 'templates-delete-pending', trigger: () => page.getByRole('button', { name: '템플릿 삭제' }), label: '삭제 중…' },
+    ]) {
+      await openRoute(page, operation.state)
+      await operation.trigger().click()
+      await expect(page.getByRole('region', { name: '요약 템플릿' })).toHaveAttribute('aria-busy', 'true')
+      await expectControlLabelUnclipped(page, operation.label)
+      await expectNoHorizontalOverflow(page)
+    }
+
+    await openRoute(page, 'codex-refresh-pending')
+    await page.getByText('고급 처리 옵션', { exact: true }).click()
+    await page.getByRole('button', { name: 'Codex CLI 상태 다시 확인' }).click()
+    await expect(page.getByRole('region', { name: 'Codex CLI 상태' })).toHaveAttribute('aria-busy', 'true')
+    await expectControlLabelUnclipped(page, 'Codex CLI 상태 확인 중…')
+    await expectNoHorizontalOverflow(page)
+  })
+}
 
 for (const width of [938, 640]) {
   test(`real dashboard has no horizontal overflow at ${width}x800`, async ({ page }) => {

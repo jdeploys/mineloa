@@ -25,6 +25,7 @@ let fixtureTemplateItems = templateItems
 const templates = {
   list: async () => fixtureTemplateItems,
   create: async (input: { name: string; sections: Array<{ title: string; kind: 'paragraph' | 'bullet_list' | 'action_items'; prompt: string }> }) => {
+    if (fixtureState === 'templates-create-pending') await new Promise<never>(() => undefined)
     const created = {
       id: 'new-template', name: input.name, isDefault: false,
       sections: input.sections.map((section, index) => ({
@@ -37,19 +38,24 @@ const templates = {
     return created
   },
   update: async (id: string, input: { name?: string; sections?: typeof templateItems[number]['sections'] }) => {
+    if (fixtureState === 'templates-save-pending') await new Promise<never>(() => undefined)
     const current = fixtureTemplateItems.find((item) => item.id === id)!
     const updated = { ...current, ...input, updatedAt: now }
     fixtureTemplateItems = fixtureTemplateItems.map((item) => item.id === id ? updated : item)
     return updated
   },
   reorderSections: async (id: string, orderedSectionIds: string[]) => {
+    if (fixtureState === 'templates-reorder-pending') await new Promise<never>(() => undefined)
     const current = fixtureTemplateItems.find((item) => item.id === id)!
     const byId = new Map(current.sections.map((section) => [section.id, section]))
     const updated = { ...current, sections: orderedSectionIds.map((sectionId) => byId.get(sectionId)!), updatedAt: now }
     fixtureTemplateItems = fixtureTemplateItems.map((item) => item.id === id ? updated : item)
     return updated
   },
-  delete: async (id: string) => { fixtureTemplateItems = fixtureTemplateItems.filter((item) => item.id !== id) },
+  delete: async (id: string) => {
+    if (fixtureState === 'templates-delete-pending') await new Promise<never>(() => undefined)
+    fixtureTemplateItems = fixtureTemplateItems.filter((item) => item.id !== id)
+  },
 }
 const fixtureState = new URLSearchParams(location.search).get('state') ?? 'idle'
 const fixtureTheme = new URLSearchParams(location.search).get('theme')
@@ -65,16 +71,21 @@ const providerDescriptors = [
   { id: 'openai' as const, stage: 'transcription' as const, displayName: 'OpenAI API', availability: { available: true, code: null, message: null }, privacy: 'audio_cloud' as const, capabilities: ['api_key', 'speaker_diarization'] as const },
   { id: 'local_whisper' as const, stage: 'transcription' as const, displayName: '로컬 Whisper', availability: { available: fixtureState !== 'whisper-downloading', code: fixtureState === 'whisper-downloading' ? 'LOCAL_WHISPER_MODEL_UNAVAILABLE' : null, message: null }, privacy: 'local' as const, capabilities: ['model_manager'] as const },
   { id: 'openai' as const, stage: 'summary' as const, displayName: 'OpenAI API', availability: { available: true, code: null, message: null }, privacy: 'text_cloud' as const, capabilities: ['api_key'] as const },
-  { id: 'codex_cli' as const, stage: 'summary' as const, displayName: 'Codex CLI', availability: fixtureState !== 'codex-unavailable' ? { available: true, code: null, message: null } : { available: false, code: 'CODEX_CONFIG_INVALID', message: null }, privacy: 'text_cloud' as const, capabilities: ['cli_status'] as const },
+  { id: 'codex_cli' as const, stage: 'summary' as const, displayName: 'Codex CLI', availability: fixtureState !== 'codex-unavailable' && fixtureState !== 'codex-refresh-pending' ? { available: true, code: null, message: null } : { available: false, code: 'CODEX_CONFIG_INVALID', message: null }, privacy: 'text_cloud' as const, capabilities: ['cli_status'] as const },
 ]
 const baseBytes = 147_951_465
+let descriptorLoadCount = 0
 const settings = {
   getApiKeyStatus: async () => ({ configured: true, lastValidatedAt: '2026-07-14T08:30:00.000Z' }),
   saveApiKey: async () => {},
   deleteApiKey: async () => {},
   getProcessingProviders: async () => providerSettings,
   updateProcessingProviders: async (input: { transcriptionProvider: 'openai' | 'local_whisper'; summaryProvider: 'openai' | 'codex_cli'; localWhisperModel: 'base' | 'small' }) => input,
-  listProcessingProviderDescriptors: async () => providerDescriptors,
+  listProcessingProviderDescriptors: async () => {
+    descriptorLoadCount += 1
+    if (fixtureState === 'codex-refresh-pending' && descriptorLoadCount > 1) await new Promise<never>(() => undefined)
+    return providerDescriptors
+  },
   listWhisperModels: async () => [
     { modelId: 'base' as const, state: fixtureState === 'whisper-installed' ? 'installed' as const : fixtureState === 'whisper-downloading' ? 'downloading' as const : 'not_installed' as const, expectedBytes: baseBytes, receivedBytes: fixtureState === 'whisper-downloading' ? 73_975_732 : fixtureState === 'whisper-installed' ? baseBytes : 0, error: null },
     { modelId: 'small' as const, state: 'not_installed' as const, expectedBytes: 487_601_967, receivedBytes: 0, error: null },

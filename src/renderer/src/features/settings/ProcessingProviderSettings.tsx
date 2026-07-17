@@ -11,14 +11,17 @@ import { WhisperModelSettings } from './WhisperModelSettings'
 
 const loadError = '처리 설정을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
 const updateError = '처리 설정을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
+type ProviderOperation = 'persist' | 'codex_refresh'
 
 export function ProcessingProviderSettings({ settings }: { settings: SettingsApi }) {
   const [value, setValue] = useState<ProcessingSettings | null>(null)
   const [descriptors, setDescriptors] = useState<ProcessingProviderDescriptor[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [pendingOperation, setPendingOperation] = useState<ProviderOperation | null>(null)
+  const pendingOperationRef = useRef<ProviderOperation | null>(null)
   const generation = useRef(0)
   const descriptorGeneration = useRef(0)
+  const busy = pendingOperation !== null
 
   const refreshDescriptors = useCallback(async () => {
     const current = ++descriptorGeneration.current
@@ -29,6 +32,18 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
       if (descriptorGeneration.current === current) setError(loadError)
     }
   }, [settings])
+
+  const runOperation = async (operation: ProviderOperation, task: () => Promise<void>) => {
+    if (pendingOperationRef.current !== null) return
+    pendingOperationRef.current = operation
+    setPendingOperation(operation)
+    try {
+      await task()
+    } finally {
+      pendingOperationRef.current = null
+      setPendingOperation(null)
+    }
+  }
 
   useEffect(() => {
     const current = ++generation.current
@@ -49,21 +64,22 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
   }, [settings])
 
   const persist = async (next: ProcessingSettings) => {
-    const current = ++generation.current
-    setBusy(true)
-    setError(null)
-    try {
-      const persisted = await settings.updateProcessingProviders(next)
-      if (generation.current === current) {
-        setValue(persisted)
-        await refreshDescriptors()
+    await runOperation('persist', async () => {
+      const current = ++generation.current
+      setError(null)
+      try {
+        const persisted = await settings.updateProcessingProviders(next)
+        if (generation.current === current) {
+          setValue(persisted)
+          await refreshDescriptors()
+        }
+      } catch {
+        if (generation.current === current) setError(updateError)
       }
-    } catch {
-      if (generation.current === current) setError(updateError)
-    } finally {
-      if (generation.current === current) setBusy(false)
-    }
+    })
   }
+
+  const refreshCodexStatus = () => runOperation('codex_refresh', refreshDescriptors)
 
   if (value === null) return <section className="processing-settings" aria-label="처리 방식 설정">
     <div className="settings-heading"><div><p className="eyebrow">PROCESSING</p><h2>고급 처리 옵션</h2></div></div>
@@ -106,7 +122,7 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
         </div>
         {openAiCapabilities && <PrivacyNotice title="OpenAI 처리"><p>OpenAI API 키를 사용하며 화자 분리를 지원합니다.</p></PrivacyNotice>}
         {modelManager && transcription !== undefined && <WhisperModelSettings settings={settings} modelId={value.localWhisperModel} descriptor={transcription} onAvailabilityChanged={refreshDescriptors} />}
-        {cliStatus && summary !== undefined && <CodexCliStatus descriptor={summary} onAvailabilityChanged={refreshDescriptors} />}
+        {cliStatus && summary !== undefined && <CodexCliStatus descriptor={summary} pending={pendingOperation === 'codex_refresh'} disabled={busy} onAvailabilityChanged={refreshCodexStatus} />}
         {error !== null && <p role="alert" className="settings-alert">{error}</p>}
       </div>
     </details>

@@ -22,9 +22,11 @@ const troubleshooting: Readonly<Record<string, readonly string[]>> = {
 interface CodexCliStatusProps {
   descriptor: ProcessingProviderDescriptor
   onAvailabilityChanged: () => Promise<void>
+  pending: boolean
+  disabled: boolean
 }
 
-export function CodexCliStatus({ descriptor, onAvailabilityChanged }: CodexCliStatusProps) {
+export function CodexCliStatus({ descriptor, onAvailabilityChanged, pending, disabled }: CodexCliStatusProps) {
   const status = descriptor.availability.available
     ? 'Codex CLI가 설치되고 인증되어 사용할 수 있습니다.'
     : guidance[descriptor.availability.code ?? ''] ?? guidance.CODEX_UNAVAILABLE
@@ -32,7 +34,7 @@ export function CodexCliStatus({ descriptor, onAvailabilityChanged }: CodexCliSt
     ? null
     : troubleshooting[descriptor.availability.code ?? ''] ?? troubleshooting.CODEX_UNAVAILABLE
 
-  return <section className="cli-status" aria-label="Codex CLI 상태">
+  return <section className="cli-status" aria-label="Codex CLI 상태" aria-busy={pending}>
     <FieldHelp>Nnote는 전역 Codex 설정이나 로그인 정보를 변경하지 않습니다.</FieldHelp>
     {descriptor.privacy === 'text_cloud' && <PrivacyNotice title="클라우드 처리">
       <p>전사문이 Codex 계정으로 전송됩니다.</p>
@@ -42,7 +44,7 @@ export function CodexCliStatus({ descriptor, onAvailabilityChanged }: CodexCliSt
     <TroubleshootingDisclosure
       title="Codex CLI 문제 해결"
       steps={steps?.map((step) => step.startsWith('codex ') || step.startsWith('npm ') ? <code>{step}</code> : step) ?? null}
-      action={steps === null ? undefined : <Button type="button" onClick={() => void onAvailabilityChanged()} aria-label="Codex CLI 상태 다시 확인">다시 확인</Button>}
+      action={steps === null ? undefined : <Button type="button" disabled={disabled} onClick={() => void onAvailabilityChanged()} aria-label={pending ? 'Codex CLI 상태 확인 중…' : 'Codex CLI 상태 다시 확인'}>{pending ? '확인 중…' : '다시 확인'}</Button>}
     />
   </section>
 }

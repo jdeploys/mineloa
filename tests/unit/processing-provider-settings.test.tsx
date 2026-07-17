@@ -43,6 +43,16 @@ function settingsApi(overrides: Partial<SettingsApi> = {}): SettingsApi {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
+
 async function expand() {
   await screen.findByLabelText('전사 방식')
   const disclosure = screen.getByText('고급 처리 옵션')
@@ -190,6 +200,97 @@ describe('processing provider settings visible outcomes', () => {
 
     expect(api.updateProcessingProviders).toHaveBeenCalledTimes(1)
     expect(screen.getByLabelText('요약 방식')).toHaveValue('codex_cli')
+  })
+
+  it('prevents duplicate or conflicting Codex refresh and restores controls after success', async () => {
+    const user = userEvent.setup()
+    const invalid = descriptors.map((descriptor) => descriptor.id === 'codex_cli'
+      ? { ...descriptor, availability: { available: false, code: 'CODEX_CONFIG_INVALID', message: null } }
+      : descriptor)
+    const refresh = deferred<ProcessingProviderDescriptor[]>()
+    const listDescriptors = vi.fn()
+      .mockResolvedValueOnce(invalid)
+      .mockResolvedValueOnce(invalid)
+      .mockImplementationOnce(() => refresh.promise)
+    const api = settingsApi({ listProcessingProviderDescriptors: listDescriptors })
+    render(<ProcessingProviderSettingsView settings={api} />)
+    await expand()
+    await user.selectOptions(screen.getByLabelText('요약 방식'), 'codex_cli')
+    await screen.findByText('Codex CLI 설정이 올바르지 않습니다. 터미널에서 설정을 확인한 뒤 다시 시도하세요.')
+
+    const refreshButton = screen.getByRole('button', { name: 'Codex CLI 상태 다시 확인' })
+    refreshButton.focus()
+    await user.keyboard('{Enter}')
+
+    expect(screen.getByRole('button', { name: 'Codex CLI 상태 확인 중…' })).toBeDisabled()
+    expect(screen.getByRole('region', { name: 'Codex CLI 상태' })).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByLabelText('전사 방식')).toBeDisabled()
+    expect(screen.getByLabelText('요약 방식')).toBeDisabled()
+    await user.keyboard('{Enter}')
+    expect(listDescriptors).toHaveBeenCalledTimes(3)
+    expect(api.updateProcessingProviders).toHaveBeenCalledTimes(1)
+
+    await act(async () => refresh.resolve(descriptors))
+    expect(await screen.findByText('Codex CLI가 설치되고 인증되어 사용할 수 있습니다.')).toBeVisible()
+    expect(screen.getByLabelText('전사 방식')).toBeEnabled()
+    expect(screen.getByLabelText('요약 방식')).toBeEnabled()
+    expect(screen.getByLabelText('요약 방식')).toHaveValue('codex_cli')
+    expect(api.updateProcessingProviders).toHaveBeenCalledTimes(1)
+  })
+
+  it('restores Codex refresh and provider controls after descriptor rejection', async () => {
+    const user = userEvent.setup()
+    const invalid = descriptors.map((descriptor) => descriptor.id === 'codex_cli'
+      ? { ...descriptor, availability: { available: false, code: 'CODEX_CONFIG_INVALID', message: null } }
+      : descriptor)
+    const refresh = deferred<ProcessingProviderDescriptor[]>()
+    const listDescriptors = vi.fn()
+      .mockResolvedValueOnce(invalid)
+      .mockResolvedValueOnce(invalid)
+      .mockImplementationOnce(() => refresh.promise)
+    const api = settingsApi({ listProcessingProviderDescriptors: listDescriptors })
+    render(<ProcessingProviderSettingsView settings={api} />)
+    await expand()
+    await user.selectOptions(screen.getByLabelText('요약 방식'), 'codex_cli')
+    await screen.findByText('Codex CLI 설정이 올바르지 않습니다. 터미널에서 설정을 확인한 뒤 다시 시도하세요.')
+
+    await user.click(screen.getByRole('button', { name: 'Codex CLI 상태 다시 확인' }))
+    await act(async () => refresh.reject(new Error('unsafe C:/secret/config.toml')))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('처리 설정을 불러오지 못했습니다. 잠시 후 다시 시도하세요.')
+    expect(document.body.textContent).not.toContain('C:/secret')
+    expect(screen.getByRole('button', { name: 'Codex CLI 상태 다시 확인' })).toBeEnabled()
+    expect(screen.getByRole('region', { name: 'Codex CLI 상태' })).toHaveAttribute('aria-busy', 'false')
+    expect(screen.getByLabelText('전사 방식')).toBeEnabled()
+    expect(screen.getByLabelText('요약 방식')).toBeEnabled()
+    expect(api.updateProcessingProviders).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables Codex refresh while a conflicting provider save is pending', async () => {
+    const user = userEvent.setup()
+    const invalid = descriptors.map((descriptor) => descriptor.id === 'codex_cli'
+      ? { ...descriptor, availability: { available: false, code: 'CODEX_CONFIG_INVALID', message: null } }
+      : descriptor)
+    const initial = { ...defaults, summaryProvider: 'codex_cli' as const }
+    const persisted = { ...initial, transcriptionProvider: 'local_whisper' as const }
+    const save = deferred<ProcessingProviderSettings>()
+    const listDescriptors = vi.fn(async () => invalid)
+    const api = settingsApi({
+      getProcessingProviders: vi.fn(async () => initial),
+      updateProcessingProviders: vi.fn(() => save.promise),
+      listProcessingProviderDescriptors: listDescriptors,
+    })
+    render(<ProcessingProviderSettingsView settings={api} />)
+    await expand()
+
+    await user.selectOptions(screen.getByLabelText('전사 방식'), 'local_whisper')
+    expect(screen.getByRole('button', { name: 'Codex CLI 상태 다시 확인' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Codex CLI 상태 다시 확인' }))
+    expect(listDescriptors).toHaveBeenCalledTimes(1)
+
+    await act(async () => save.resolve(persisted))
+    await waitFor(() => expect(listDescriptors).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('button', { name: 'Codex CLI 상태 다시 확인' })).toBeEnabled()
   })
 
   it.each([
