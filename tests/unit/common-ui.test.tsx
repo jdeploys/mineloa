@@ -30,6 +30,19 @@ describe('common UI semantics', () => {
     expect(screen.getByRole('button', { name: '삭제' })).toBeDisabled()
     expect(screen.getByRole('button')).toHaveAttribute('data-variant', 'danger')
     expect(screen.getByRole('button')).toHaveAttribute('name', 'delete')
+    expect(screen.getByRole('button').querySelector('svg')).toBeNull()
+  })
+
+  it('adds a decorative icon without changing the button name or click behavior', () => {
+    const onClick = vi.fn()
+    render(<Button icon="save" onClick={onClick}>저장</Button>)
+
+    const button = screen.getByRole('button', { name: '저장' })
+    const icon = button.querySelector('svg')
+    expect(icon).toHaveAttribute('aria-hidden', 'true')
+    expect(icon).toHaveAttribute('focusable', 'false')
+    fireEvent.click(button)
+    expect(onClick).toHaveBeenCalledOnce()
   })
 
   it('renders cards as labelled sections by default', () => {
@@ -57,12 +70,13 @@ describe('common UI semantics', () => {
   it('exposes badge and availability state through stable data attributes', () => {
     render(
       <>
-        <StatusBadge label="완료" tone="success" />
+        <StatusBadge label="완료" tone="success" icon="success" />
         <StatusIndicator available>Codex 사용 가능</StatusIndicator>
       </>,
     )
 
     expect(screen.getByText('완료')).toHaveAttribute('data-tone', 'success')
+    expect(screen.getByText('완료').querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     expect(screen.getByText('Codex 사용 가능')).toHaveAttribute('data-available', 'true')
   })
 

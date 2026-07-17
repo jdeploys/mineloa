@@ -8,7 +8,7 @@
 .nav-import { margin-left: 8px; }
 
 .surface-card { min-width: 0; border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-1); padding: 24px; }
-.status-badge { display: inline-flex; align-items: center; width: fit-content; border: 1px solid var(--hairline); border-radius: var(--radius-full); background: var(--surface-2); color: var(--ink-subtle); padding: 4px 8px; font-size: var(--type-size-badge); font-weight: 600; line-height: 1.2; }
+.status-badge { display: inline-flex; align-items: center; gap: 5px; width: fit-content; border: 1px solid var(--hairline); border-radius: var(--radius-full); background: var(--surface-2); color: var(--ink-subtle); padding: 4px 8px; font-size: var(--type-size-badge); font-weight: 600; line-height: 1.2; }
 .status-badge[data-tone='success'] { color: var(--status-badge-success-foreground); }
 .status-badge[data-tone='warning'] { color: var(--status-badge-warning-foreground); }
 .status-badge[data-tone='danger'] { color: var(--status-badge-danger-foreground); }

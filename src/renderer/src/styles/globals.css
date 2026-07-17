@@ -68,8 +68,19 @@ textarea {
 }
 
 .ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   min-height: 48px;
   border-radius: var(--radius-control);
+}
+
+.ui-icon {
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+  stroke: currentColor;
 }
 
 .ui-button[data-variant='primary'],
