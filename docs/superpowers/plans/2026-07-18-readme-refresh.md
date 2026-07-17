@@ -30,19 +30,19 @@
 - Consumes: current feature set, package scripts, screenshot paths, and release URL
 - Produces: the repository landing document used by GitHub visitors and contributors
 
-- [ ] **Step 1: Replace the old information hierarchy**
+- [x] **Step 1: Replace the old information hierarchy**
 
 Order sections as introduction, representative screenshot, features, download warning, provider comparison, quick start, privacy/files, development, packaging, and related documents.
 
-- [ ] **Step 2: Correct outdated product claims**
+- [x] **Step 2: Correct outdated product claims**
 
 Describe bundled Whisper/FFmpeg, downloadable base/small models, OpenAI transcription and summary, and optional Codex CLI summary. Remove the obsolete statement that FFmpeg is unsupported.
 
-- [ ] **Step 3: Add verified release guidance**
+- [x] **Step 3: Add verified release guidance**
 
 Link `https://github.com/jdeploys/NNote/releases/tag/v0.0.1`, label it prerelease, list Windows x64 and both macOS architectures, and warn about unsigned SmartScreen/Gatekeeper prompts.
 
-- [ ] **Step 4: Verify document integrity**
+- [x] **Step 4: Verify document integrity**
 
 Run:
 
@@ -55,7 +55,7 @@ git diff --check
 
 Expected: every relative path exists, the forbidden-content search returns no matches, and `git diff --check` exits successfully.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add README.md docs/superpowers/plans/2026-07-18-readme-refresh.md
