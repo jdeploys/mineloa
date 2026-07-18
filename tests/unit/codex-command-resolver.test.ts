@@ -18,6 +18,9 @@ afterEach(async () => {
 })
 
 describe('Codex command resolver', () => {
+  it('disables external CLI discovery for the Mac App Store sandbox', async () => {
+    await expect(createCodexCommandResolver({ disabled: true })()).resolves.toEqual([])
+  })
   it('keeps non-Windows invocation direct and shell-free', async () => {
     await expect(createCodexCommandResolver({ platform: 'darwin', pathValue: '/unused' })())
       .resolves.toEqual([{ command: 'codex', argsPrefix: [] }])

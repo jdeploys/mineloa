@@ -33,6 +33,30 @@ const context = (appOutDir: string, codeSigningInfo?: { value: Promise<{ keychai
 })
 
 describe('macOS local runtime signing order', () => {
+  it('signs bundled executables with inherited sandbox entitlements for MAS', async () => {
+    const target = await fixture()
+    const calls: string[][] = []
+    const hook = createAfterPackHook({
+      run: (_command, args) => {
+        calls.push(args)
+        return { status: 0, error: undefined }
+      },
+      identity: () => 'Apple Distribution: Example',
+    })
+
+    await hook({ ...context(target.appOutDir, { value: Promise.resolve({}) }), electronPlatformName: 'mas' })
+
+    expect(calls).toHaveLength(2)
+    for (const args of calls) {
+      expect(args).toEqual(expect.arrayContaining([
+        '--entitlements', 'build/entitlements.mas.inherit.plist',
+        '--sign', 'Apple Distribution: Example',
+      ]))
+      expect(args).not.toContain('--options')
+      expect(args).not.toContain('--timestamp')
+    }
+  })
+
   it('signs both helpers before atomically refreshing hashes from final bytes', async () => {
     const target = await fixture()
     const order: string[] = []

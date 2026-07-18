@@ -11,6 +11,7 @@ export type CodexCommandResolver = () => Promise<readonly CodexCommand[]>
 interface CodexCommandResolverOptions {
   readonly platform?: NodeJS.Platform
   readonly pathValue?: string
+  readonly disabled?: boolean
 }
 
 export function createCodexCommandResolver(
@@ -18,6 +19,8 @@ export function createCodexCommandResolver(
 ): CodexCommandResolver {
   const platform = options.platform ?? process.platform
   const pathValue = options.pathValue ?? process.env.PATH ?? ''
+
+  if (options.disabled === true) return async () => []
 
   if (platform !== 'win32') {
     return async () => [{ command: 'codex', argsPrefix: [] }]

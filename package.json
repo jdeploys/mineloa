@@ -25,6 +25,9 @@
     "package:win:x64": "npm run build && electron-builder --win nsis dir --x64 --publish never",
     "package:mac:x64": "npm run build && electron-builder --mac dmg dir --x64 --publish never",
     "package:mac:arm64": "npm run build && electron-builder --mac dmg dir --arm64 --publish never",
+    "package:mas:arm64": "npm run build && npm run rebuild:electron && MAS_BUILD=true electron-builder --mac mas --arm64 --publish never",
+    "package:mas-dev:arm64": "npm run build && npm run rebuild:electron && MAS_BUILD=true electron-builder --mac mas-dev --arm64 --publish never",
+    "docs:app-store-screenshots": "playwright test -c playwright.appstore.config.ts",
     "verify:win": "node scripts/verify-package.mjs dist/win-unpacked"
   },
   "build": {
@@ -99,6 +102,38 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Mineloa needs microphone access to record meetings locally on this Mac."
+      }
+    },
+    "mas": {
+      "target": [
+        "mas"
+      ],
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": false,
+      "entitlements": "build/entitlements.mas.plist",
+      "entitlementsInherit": "build/entitlements.mas.inherit.plist",
+      "signIgnore": [],
+      "bundleShortVersion": "1.0",
+      "bundleVersion": "1",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Mineloa needs microphone access to record meetings locally on this Mac.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "masDev": {
+      "target": [
+        "mas-dev"
+      ],
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": false,
+      "entitlements": "build/entitlements.mas.plist",
+      "entitlementsInherit": "build/entitlements.mas.inherit.plist",
+      "signIgnore": [],
+      "bundleShortVersion": "1.0",
+      "bundleVersion": "1",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Mineloa needs microphone access to record meetings locally on this Mac.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "nsis": {

@@ -91,7 +91,7 @@ if (verificationRequest !== null) {
             new CodexCliSummaryAdapter(
               runOwnedProcess,
               app.getPath('temp'),
-              createCodexCommandResolver(),
+              createCodexCommandResolver({ disabled: process.mas }),
             ),
           ],
         )

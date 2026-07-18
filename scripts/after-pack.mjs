@@ -4,8 +4,12 @@ import { spawnSync } from 'node:child_process'
 import { writeRuntimeManifest } from './write-local-runtime-manifest.mjs'
 import { signAsync } from '@electron/osx-sign'
 
-function runCodesign(run, identity, helper, keychainFile) {
-  const signingOptions = identity === '-' ? [] : ['--options', 'runtime', '--timestamp']
+function runCodesign(run, identity, helper, keychainFile, masBuild) {
+  const signingOptions = identity === '-'
+    ? []
+    : masBuild
+      ? ['--entitlements', 'build/entitlements.mas.inherit.plist']
+      : ['--options', 'runtime', '--timestamp']
   const keychainOptions = keychainFile ? ['--keychain', keychainFile] : []
   const result = run('codesign', [
     '--force', ...signingOptions, ...keychainOptions, '--sign', identity, helper,
@@ -39,7 +43,8 @@ export function createAfterPackHook(dependencies = {}) {
   const resolveIdentity = dependencies.identity ?? (() => process.env.CSC_NAME?.trim() || '-')
   const signApplication = dependencies.signApplication ?? signAsync
   return async function signLocalRuntimeHelpers(context) {
-    if (context.electronPlatformName !== 'darwin') return
+    if (!['darwin', 'mas'].includes(context.electronPlatformName)) return
+    const masBuild = context.electronPlatformName === 'mas' || process.env.MAS_BUILD === 'true'
     const app = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
     const root = join(app, 'Contents', 'Resources', 'local-runtime')
     const targets = readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory())
@@ -56,8 +61,8 @@ export function createAfterPackHook(dependencies = {}) {
       throw new Error('Nested helper signing failed: identity')
     }
     const keychainFile = await resolveKeychainFile(context, identity)
-    runCodesign(run, identity, join(targetRoot, 'whisper-cli'), keychainFile)
-    runCodesign(run, identity, join(targetRoot, 'ffmpeg'), keychainFile)
+    runCodesign(run, identity, join(targetRoot, 'whisper-cli'), keychainFile, masBuild)
+    runCodesign(run, identity, join(targetRoot, 'ffmpeg'), keychainFile, masBuild)
     await refreshManifest({
       directory: targetRoot,
       platform: 'darwin',

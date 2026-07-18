@@ -1,0 +1,115 @@
+name: mac-app-store
+
+on:
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: App Store marketing version
+        required: true
+        default: '1.0'
+        type: string
+      build_number:
+        description: Unique App Store build number
+        required: true
+        type: string
+      upload:
+        description: Validate and upload to App Store Connect
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-app-store-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-upload:
+    runs-on: macos-15
+    timeout-minutes: 120
+    environment: app-store
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+      - run: npm ci
+      - name: Validate release candidate
+        run: npm run test:release
+      - name: Build pinned Apple Silicon local runtime
+        run: bash ./scripts/build-local-runtime.sh arm64 2>&1 | tee runtime-build.log
+      - name: Install App Store provisioning profile
+        env:
+          MAS_PROVISIONING_PROFILE_BASE64: ${{ secrets.MAS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$MAS_PROVISIONING_PROFILE_BASE64"
+          printf '%s' "$MAS_PROVISIONING_PROFILE_BASE64" | base64 --decode > build/mineloa-app-store.provisionprofile
+      - name: Build signed Mac App Store package
+        env:
+          CSC_LINK: ${{ secrets.MAS_CERTIFICATE_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAS_CERTIFICATE_PASSWORD }}
+          CSC_NAME: Apple Distribution
+          MAS_BUILD: 'true'
+        run: |
+          set -euo pipefail
+          npm run build
+          npm run rebuild:electron
+          npx electron-builder --mac mas --arm64 --publish never \
+            --config.mas.provisioningProfile=build/mineloa-app-store.provisionprofile \
+            --config.mas.bundleShortVersion='${{ inputs.marketing_version }}' \
+            --config.mas.bundleVersion='${{ inputs.build_number }}'
+      - name: Verify package identity, entitlements, and runtime
+        run: |
+          set -euo pipefail
+          app='dist/mas-arm64/Mineloa.app'
+          test -d "$app"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist" | grep -Fx 'com.jdeploys.mineloa'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" | grep -Fx '${{ inputs.marketing_version }}'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist" | grep -Fx '${{ inputs.build_number }}'
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -d --entitlements :- "$app" > app-entitlements.plist
+          plutil -extract com.apple.security.app-sandbox raw -o - app-entitlements.plist | grep -Fx true
+          node scripts/verify-package.mjs "$app" | tee package-verification.log
+          grep -F '"localRuntime":true' package-verification.log
+          pkg=$(find dist -maxdepth 2 -type f -name '*.pkg' -print -quit)
+          test -n "$pkg"
+          pkgutil --check-signature "$pkg" | tee package-signature.log
+          printf 'PKG_PATH=%s\n' "$pkg" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mineloa-mas-${{ inputs.marketing_version }}-${{ inputs.build_number }}
+          path: |
+            ${{ env.PKG_PATH }}
+            runtime-build.log
+            package-verification.log
+            package-signature.log
+            app-entitlements.plist
+          if-no-files-found: error
+      - name: Install App Store Connect API key
+        if: inputs.upload
+        env:
+          ASC_API_PRIVATE_KEY: ${{ secrets.ASC_API_PRIVATE_KEY }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$ASC_API_PRIVATE_KEY"
+          test -n "$ASC_API_KEY_ID"
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$ASC_API_PRIVATE_KEY" > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
+          chmod 600 "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
+      - name: Validate App Store package
+        if: inputs.upload
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: xcrun altool --validate-app --type macos --file "$PKG_PATH" --apiKey "$ASC_API_KEY_ID" --apiIssuer "$ASC_API_ISSUER_ID"
+      - name: Upload to App Store Connect
+        if: inputs.upload
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: xcrun altool --upload-app --type macos --file "$PKG_PATH" --apiKey "$ASC_API_KEY_ID" --apiIssuer "$ASC_API_ISSUER_ID"

@@ -55,6 +55,7 @@ describe('release package configuration', () => {
       'package:win:x64': expect.stringContaining('--x64'),
       'package:mac:x64': expect.stringContaining('--x64'),
       'package:mac:arm64': expect.stringContaining('--arm64'),
+      'package:mas:arm64': expect.stringContaining('--mac mas --arm64'),
     })
     const workflowPath = resolve('.github/workflows/release.yml')
     expect(existsSync(workflowPath)).toBe(true)
@@ -84,6 +85,24 @@ describe('release package configuration', () => {
       to: 'local-runtime/darwin-${arch}',
     })
     expect(JSON.stringify(manifest.build)).not.toMatch(/ggml-(?:base|small)\.bin|models\/|models\\/)
+  })
+
+  it('defines a sandboxed Mac App Store package and automated upload workflow', () => {
+    expect(manifest.build.mas).toMatchObject({
+      target: ['mas'],
+      entitlements: 'build/entitlements.mas.plist',
+      entitlementsInherit: 'build/entitlements.mas.inherit.plist',
+      signIgnore: [],
+      bundleShortVersion: '1.0',
+    })
+    const entitlements = readFileSync(resolve('build/entitlements.mas.plist'), 'utf8')
+    expect(entitlements).toContain('com.apple.security.app-sandbox')
+    expect(entitlements).toContain('com.apple.security.device.audio-input')
+    expect(entitlements).toContain('com.apple.security.network.client')
+    const workflow = readFileSync(resolve('.github/workflows/app-store.yml'), 'utf8')
+    expect(workflow).toContain('xcrun altool --validate-app')
+    expect(workflow).toContain('xcrun altool --upload-app')
+    expect(workflow).toContain('com.jdeploys.mineloa')
   })
 
   it('builds and verifies each runtime before clobbering the existing prerelease assets', () => {
@@ -156,7 +175,7 @@ describe('release package configuration', () => {
   })
 
   it('pins every repository workflow action', () => {
-    for (const name of ['ci.yml', 'release.yml']) {
+    for (const name of ['ci.yml', 'release.yml', 'app-store.yml']) {
       const workflow = readFileSync(resolve('.github/workflows', name), 'utf8')
       expect(workflow, name).not.toMatch(/uses:\s+[^\s]+@(?![a-f0-9]{40}(?:\s+#|\s*$))/m)
     }
@@ -185,7 +204,8 @@ describe('release package configuration', () => {
     expect(workflow).toContain('MAC_CSC_NAME')
     expect(workflow).toContain('TeamIdentifier')
     expect(workflow).toContain('DEVELOPER ID SIGNED; UNNOTARIZED')
-    expect(helperHook).toContain("identity === '-' ? [] : ['--options', 'runtime', '--timestamp']")
+    expect(helperHook).toContain("? ['--entitlements', 'build/entitlements.mas.inherit.plist']")
+    expect(helperHook).toContain(": ['--options', 'runtime', '--timestamp']")
     expect(appHook).not.toContain("'--options', 'runtime'")
     expect(appHook).not.toContain("'--deep'")
     expect(workflow).toMatch(/grep -E .+Mach-O 64-bit executable/)
