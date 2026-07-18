@@ -168,7 +168,11 @@ export function RecordingPanel({ controls, onNavigate, settingsFocusKey, templat
             <label className="recording-microphone-field">마이크 <span className="recording-select-control"><select aria-label="마이크" value={microphoneDeviceId} onFocus={() => void refreshMicrophones()} onChange={(event) => setMicrophoneDeviceId(event.target.value)}><option value="">시스템 기본 마이크</option>{microphones.map((microphone) => <option key={microphone.deviceId} value={microphone.deviceId}>{microphone.label}</option>)}</select><Icon name="down" size={20} /></span></label>
             <div className="recording-quality-field">
               <span>녹음 품질</span>
-              <label className="recording-checkbox"><input type="checkbox" checked={farFieldMode} onChange={(event) => setFarFieldMode(event.currentTarget.checked)} /><span><strong>원거리 음성 강화</strong><small>먼 목소리를 더 잘 담습니다.</small></span></label>
+              <label className="recording-checkbox">
+                <input className="recording-switch-input" type="checkbox" role="switch" checked={farFieldMode} onChange={(event) => setFarFieldMode(event.currentTarget.checked)} />
+                <span className="recording-checkbox-copy"><strong>원거리 음성 강화</strong><small>먼 목소리를 더 잘 담습니다.</small></span>
+                <span className="recording-switch" aria-hidden="true" />
+              </label>
             </div>
           </div>
           <ActionBar>

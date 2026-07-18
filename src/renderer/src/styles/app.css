@@ -67,11 +67,16 @@
 .recording-microphone-field { grid-column: 1 / -1; }
 .recording-quality-field { grid-column: 1 / -1; display: grid; gap: 7px; min-width: 0; }
 .recording-quality-field > span { color: var(--ink-subtle); font-size: var(--type-size-caption-sm); font-weight: 600; }
-.recording-fields .recording-checkbox { min-height: 48px; grid-template-columns: auto minmax(0, 1fr); align-items: center; border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-1); padding: 8px 12px; cursor: pointer; }
-.recording-checkbox input { width: 18px; min-height: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--primary); }
-.recording-checkbox span { display: grid; gap: 1px; }
+.recording-fields .recording-checkbox { position: relative; min-height: 64px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-1); padding: 10px 14px; cursor: pointer; }
+.recording-switch-input { position: absolute; width: 1px; min-height: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.recording-checkbox-copy { display: grid; gap: 1px; }
 .recording-checkbox strong { color: var(--ink); font-size: var(--type-size-caption-sm); }
 .recording-checkbox small { color: var(--ink-tertiary); font-size: var(--type-size-badge); font-weight: 500; line-height: 1.35; white-space: normal; }
+.recording-switch { position: relative; display: block; width: 46px; height: 28px; flex: 0 0 auto; border-radius: var(--radius-full); background: var(--hairline-strong); transition: background 160ms ease; }
+.recording-switch::after { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: var(--radius-full); background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 28%); content: ''; transition: transform 160ms ease; }
+.recording-switch-input:checked ~ .recording-switch { background: var(--primary); }
+.recording-switch-input:checked ~ .recording-switch::after { transform: translateX(18px); }
+.recording-switch-input:focus-visible ~ .recording-switch { outline: 3px solid color-mix(in srgb, var(--primary) 45%, transparent); outline-offset: 3px; }
 .recording-options > .action-bar { padding-top: 2px; }
 .recording-active > .action-bar, .recording-pending > .action-bar { align-items: flex-start; flex-wrap: wrap; }
 .recording-active > .action-bar > div:first-child, .recording-pending > .action-bar > div:first-child { flex: 1 1 280px; }

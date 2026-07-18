@@ -195,7 +195,7 @@ describe('RecordingPanel', () => {
     await user.selectOptions(screen.getByLabelText('마이크'), 'room-mic')
     expect(screen.getByText('녹음 품질')).toBeVisible()
     expect(screen.getByText('먼 목소리를 더 잘 담습니다.')).toBeVisible()
-    expect(screen.getByRole('checkbox', { name: /원거리 음성 강화/ })).toBeChecked()
+    expect(screen.getByRole('switch', { name: /원거리 음성 강화/ })).toBeChecked()
     await user.click(screen.getByRole('button', { name: '녹음 시작' }))
     expect(controls.start).toHaveBeenCalledWith({ selectedTemplateId: 'custom', audioPolicy: 'keep', microphoneDeviceId: 'room-mic', farFieldMode: true })
 
