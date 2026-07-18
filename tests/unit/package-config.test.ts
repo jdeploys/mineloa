@@ -171,11 +171,12 @@ describe('release package configuration', () => {
     expect(workflow).toMatch(/release:\n(?:.|\n)*?permissions:\n\s+contents: write/)
     expect(workflow).not.toMatch(/uses:\s+[^\s]+@(?![a-f0-9]{40}(?:\s+#|\s*$))/m)
     expect(workflow).not.toMatch(/^\s{4}env:\n(?:\s{6}.+\n)*?\s{6}(?:CSC_|APPLE_)/m)
-    expect(workflow).toContain("MAC_SIGNING_CONFIGURED: ${{ secrets.CSC_LINK != '' && secrets.CSC_KEY_PASSWORD != '' && secrets.MAC_CSC_NAME != '' }}")
+    expect(workflow).toContain('CSC_LINK: ${{ secrets.MAC_CSC_LINK }}')
+    expect(workflow).toContain('APPLE_API_ISSUER: ${{ secrets.ASC_API_ISSUER_ID }}')
   })
 
   it('pins every repository workflow action', () => {
-    for (const name of ['ci.yml', 'release.yml', 'app-store.yml']) {
+    for (const name of ['ci.yml', 'release.yml', 'app-store.yml', 'mac-direct-release.yml']) {
       const workflow = readFileSync(resolve('.github/workflows', name), 'utf8')
       expect(workflow, name).not.toMatch(/uses:\s+[^\s]+@(?![a-f0-9]{40}(?:\s+#|\s*$))/m)
     }
@@ -191,7 +192,7 @@ describe('release package configuration', () => {
     expect(release).not.toContain('visual-comparison-macos')
   })
 
-  it('separates hardened Developer ID signing from ad-hoc fallback', () => {
+  it('requires hardened Developer ID signing and notarization for releases', () => {
     const workflow = readFileSync(resolve('.github/workflows/release.yml'), 'utf8')
     const helperHook = readFileSync(resolve('scripts/after-pack.mjs'), 'utf8')
     const appHook = readFileSync(resolve('scripts/after-sign.mjs'), 'utf8')
@@ -200,10 +201,11 @@ describe('release package configuration', () => {
       '/Contents/Resources/local-runtime/darwin-(?:x64|arm64)/whisper-cli$',
       '/Contents/Resources/local-runtime/darwin-(?:x64|arm64)/ffmpeg$',
     ])
-    expect(workflow).toContain('--config.mac.hardenedRuntime=false')
-    expect(workflow).toContain('MAC_CSC_NAME')
+    expect(workflow).not.toContain('--config.mac.hardenedRuntime=false')
+    expect(workflow).toContain('MAC_CSC_LINK')
     expect(workflow).toContain('TeamIdentifier')
-    expect(workflow).toContain('DEVELOPER ID SIGNED; UNNOTARIZED')
+    expect(workflow).toContain('--config.mac.notarize=true')
+    expect(workflow).toContain('DEVELOPER ID SIGNED AND NOTARIZED')
     expect(helperHook).toContain("? ['--entitlements', 'build/entitlements.mas.inherit.plist']")
     expect(helperHook).toContain(": ['--options', 'runtime', '--timestamp']")
     expect(appHook).not.toContain("'--options', 'runtime'")
@@ -213,9 +215,9 @@ describe('release package configuration', () => {
 
   it('uses state-neutral release copy for macOS signing diagnostics', () => {
     const workflow = readFileSync(resolve('.github/workflows/release.yml'), 'utf8')
-    expect(workflow).toContain('macOS signing and notarization diagnostics are available as workflow artifacts')
+    expect(workflow).toContain('macOS builds are Developer ID signed and notarized by Apple')
     expect(workflow).not.toContain('attached workflow diagnostics')
-    expect(workflow).not.toContain('macOS artifacts are ad-hoc signed and unnotarized unless')
+    expect(workflow).not.toContain('AD-HOC SIGNED; UNNOTARIZED')
   })
 
   it('uses electron-builder supported signIgnore regex semantics', () => {

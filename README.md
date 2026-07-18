@@ -110,6 +110,28 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run package:mac
 node scripts/verify-package.mjs dist/mac-*/Mineloa.app
 ```
 
+현재 Mac의 Apple Development 인증서로 로컬 실행용 arm64/x64 앱을 만들려면 다음을 실행합니다. 이 명령은 고정된 Whisper/FFmpeg 런타임을 다시 빌드하고, Electron 내부 코드와 앱을 하나의 Team ID로 서명한 뒤 실제 실행 검증까지 수행합니다.
+
+```bash
+MAC_SIGNING_IDENTITY='Apple Development: NAME (TEAM_ID)' npm run package:mac:local
+```
+
+`/Applications`에 기존 Mineloa가 없으면 빌드와 검증 후 바로 설치할 수도 있습니다.
+
+```bash
+MAC_SIGNING_IDENTITY='Apple Development: NAME (TEAM_ID)' npm run install:mac:local
+```
+
+Apple Development 서명은 해당 개발 Mac에서 로컬 검증하기 위한 것이며 Developer ID 서명과 Apple notarization을 대신하지 않습니다.
+
+외부 배포용 DMG는 기존 GitHub Secrets의 Developer ID 인증서와 App Store Connect API 키를 사용해 다음 한 명령으로 빌드·서명·공증·검증한 뒤 로컬 `dist/notarized-*` 폴더로 다운로드합니다. 이 빌드는 App Store 샌드박스판이 아니므로 Codex CLI 연동을 사용할 수 있습니다.
+
+```bash
+npm run release:mac
+```
+
+현재 브랜치가 원격에 푸시되어 있어야 하며, 자격 증명이 없으면 서명되지 않은 DMG로 대체하지 않고 실패합니다. 태그 기반 GitHub Actions 릴리스도 같은 Developer ID 서명과 App Store Connect API 키 공증을 사용합니다.
+
 패키지 검증은 임시 사용자 데이터 디렉터리에서 실제 앱을 실행해 Main, SQLite, OS Keyring, sandbox preload와 renderer 대시보드를 확인합니다. 저장된 API 키는 읽거나 변경하지 않습니다.
 
 공개 배포에는 Windows 코드 서명 인증서가 필요합니다. macOS의 App Store 외부 배포에는 Apple Developer ID 서명과 notarization이 필요하며, Mac App Store판에는 별도의 Electron `mas` 빌드와 App Sandbox 구성이 필요합니다.

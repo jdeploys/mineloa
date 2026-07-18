@@ -77,6 +77,19 @@ jobs:
           node-version: 22.12.0
           cache: npm
       - run: npm ci
+      - name: Install App Store Connect API key
+        env:
+          ASC_API_PRIVATE_KEY: ${{ secrets.ASC_API_PRIVATE_KEY }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$ASC_API_PRIVATE_KEY"
+          test -n "$ASC_API_KEY_ID"
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          key="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
+          printf '%s' "$ASC_API_PRIVATE_KEY" > "$key"
+          chmod 600 "$key"
+          printf 'APPLE_API_KEY=%s\n' "$key" >> "$GITHUB_ENV"
       - name: Build pinned macOS local runtime
         run: |
           set -euo pipefail
@@ -86,31 +99,19 @@ jobs:
           bash ./scripts/build-local-runtime.sh "${{ matrix.arch }}" 2>&1 | tee runtime-build.log
       - name: Package macOS ${{ matrix.arch }}
         env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          CSC_NAME: ${{ secrets.MAC_CSC_NAME }}
-          MAC_SIGNING_CONFIGURED: ${{ secrets.CSC_LINK != '' && secrets.CSC_KEY_PASSWORD != '' && secrets.MAC_CSC_NAME != '' }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          MAC_NOTARIZATION_CONFIGURED: ${{ secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          CSC_NAME: 'Developer ID Application: CHANMI KIM (J3W2GDPJ7Y)'
+          APPLE_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.ASC_API_ISSUER_ID }}
         run: |
           set -euo pipefail
-          echo "MAC_SIGNING_CONFIGURED=$MAC_SIGNING_CONFIGURED" >> "$GITHUB_ENV"
-          echo "MAC_NOTARIZATION_CONFIGURED=$MAC_NOTARIZATION_CONFIGURED" >> "$GITHUB_ENV"
-          if [[ "$MAC_SIGNING_CONFIGURED" == true ]]; then
-            export CSC_IDENTITY_AUTO_DISCOVERY=true
-            if [[ "$MAC_NOTARIZATION_CONFIGURED" == true ]]; then
-              npm run package:mac:${{ matrix.arch }} -- --config.mac.notarize=true
-            else
-              npm run package:mac:${{ matrix.arch }}
-            fi
-          else
-            unset CSC_LINK CSC_KEY_PASSWORD
-            export CSC_NAME=-
-            export CSC_IDENTITY_AUTO_DISCOVERY=false
-            npm run package:mac:${{ matrix.arch }} -- --config.mac.hardenedRuntime=false --config.mac.notarize=false
-          fi
+          test -n "$CSC_LINK"
+          test -n "$CSC_KEY_PASSWORD"
+          test -n "$APPLE_API_KEY"
+          test -n "$APPLE_API_KEY_ID"
+          test -n "$APPLE_API_ISSUER"
+          npm run package:mac:${{ matrix.arch }} -- --config.mac.notarize=true
       - name: Verify packaged macOS runtime
         run: |
           set -euo pipefail
@@ -130,22 +131,15 @@ jobs:
           codesign -dv --verbose=4 "$runtime/whisper-cli" > whisper-signature.txt 2>&1
           codesign -dv --verbose=4 "$runtime/ffmpeg" > ffmpeg-signature.txt 2>&1
           cat app-signature.txt whisper-signature.txt ffmpeg-signature.txt >> signature-diagnostics.log
-          if [[ "$MAC_SIGNING_CONFIGURED" == true ]]; then
-            grep '^Authority=' app-signature.txt
-            grep '^TeamIdentifier=' app-signature.txt
-            diff <(grep '^Authority=' app-signature.txt) <(grep '^Authority=' whisper-signature.txt)
-            diff <(grep '^Authority=' app-signature.txt) <(grep '^Authority=' ffmpeg-signature.txt)
-            diff <(grep '^TeamIdentifier=' app-signature.txt) <(grep '^TeamIdentifier=' whisper-signature.txt)
-            diff <(grep '^TeamIdentifier=' app-signature.txt) <(grep '^TeamIdentifier=' ffmpeg-signature.txt)
-          fi
-          if [[ "$MAC_NOTARIZATION_CONFIGURED" == true && "$MAC_SIGNING_CONFIGURED" == true ]]; then
-            spctl --assess --type execute --verbose=4 "${{ matrix.app-dir }}" 2>&1 | tee -a signature-diagnostics.log
-            echo 'NOTARIZATION VERIFIED' | tee -a signature-diagnostics.log
-          elif [[ "$MAC_SIGNING_CONFIGURED" == true ]]; then
-            echo 'DEVELOPER ID SIGNED; UNNOTARIZED (notarization credentials are incomplete)' | tee -a signature-diagnostics.log
-          else
-            echo 'AD-HOC SIGNED; UNNOTARIZED (no complete signing/notarization credentials configured)' | tee -a signature-diagnostics.log
-          fi
+          grep -F 'Authority=Developer ID Application: CHANMI KIM (J3W2GDPJ7Y)' app-signature.txt
+          grep -F 'TeamIdentifier=J3W2GDPJ7Y' app-signature.txt
+          diff <(grep '^Authority=' app-signature.txt) <(grep '^Authority=' whisper-signature.txt)
+          diff <(grep '^Authority=' app-signature.txt) <(grep '^Authority=' ffmpeg-signature.txt)
+          diff <(grep '^TeamIdentifier=' app-signature.txt) <(grep '^TeamIdentifier=' whisper-signature.txt)
+          diff <(grep '^TeamIdentifier=' app-signature.txt) <(grep '^TeamIdentifier=' ffmpeg-signature.txt)
+          xcrun stapler validate "${{ matrix.app-dir }}" 2>&1 | tee -a signature-diagnostics.log
+          spctl --assess --type execute --verbose=4 "${{ matrix.app-dir }}" 2>&1 | tee -a signature-diagnostics.log
+          echo 'DEVELOPER ID SIGNED AND NOTARIZED' | tee -a signature-diagnostics.log
       - name: Normalize release asset
         run: node scripts/prepare-release-assets.mjs .dmg macos ${{ matrix.arch }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -200,7 +194,7 @@ jobs:
             "release-assets/Mineloa-${VERSION}-macos-arm64.dmg"
             "release-assets/SHA256SUMS.txt"
           )
-          notes="Mineloa desktop prerelease. macOS signing and notarization diagnostics are available as workflow artifacts, not attached release assets; Gatekeeper may warn for unnotarized builds."
+          notes="Mineloa desktop prerelease. macOS builds are Developer ID signed and notarized by Apple."
           if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release upload "$TAG" --clobber "${assets[@]}" --repo "${{ github.repository }}"
             gh release edit "$TAG" --repo "${{ github.repository }}" --prerelease --title "Mineloa ${VERSION}" --notes "$notes"

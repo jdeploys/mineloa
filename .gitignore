@@ -10,3 +10,8 @@ build/local-runtime/.work/
 build/local-runtime/win32-*/
 build/local-runtime/darwin-*/
 .signing-private/
+.DS_Store
+build/developer-id-bootstrap/
+AuthKey_*.p8
+*.p12
+*.certSigningRequest
