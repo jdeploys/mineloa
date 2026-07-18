@@ -21,6 +21,26 @@ function defaultRun(command, args) {
   return spawnSync(command, args, { encoding: 'utf8', windowsHide: true })
 }
 
+function applyMasVersions(run, app) {
+  const marketingVersion = process.env.MAS_MARKETING_VERSION?.trim()
+  const buildNumber = process.env.MAS_BUILD_NUMBER?.trim()
+  if (!marketingVersion && !buildNumber) return
+  if (!marketingVersion || !/^\d+(?:\.\d+){1,2}$/.test(marketingVersion)) {
+    throw new Error('Invalid MAS marketing version')
+  }
+  if (!buildNumber || !/^\d+$/.test(buildNumber)) {
+    throw new Error('Invalid MAS build number')
+  }
+  const infoPlist = join(app, 'Contents', 'Info.plist')
+  for (const [key, value] of [
+    ['CFBundleShortVersionString', marketingVersion],
+    ['CFBundleVersion', buildNumber],
+  ]) {
+    const result = run('/usr/libexec/PlistBuddy', ['-c', `Set :${key} ${value}`, infoPlist])
+    if (result.error || result.status !== 0) throw new Error(`Failed to set ${key}`)
+  }
+}
+
 async function resolveKeychainFile(context, identity) {
   if (identity === '-') return undefined
   const signingInfo = await context.packager.codeSigningInfo?.value
@@ -46,6 +66,7 @@ export function createAfterPackHook(dependencies = {}) {
     if (!['darwin', 'mas'].includes(context.electronPlatformName)) return
     const masBuild = context.electronPlatformName === 'mas' || process.env.MAS_BUILD === 'true'
     const app = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
+    if (masBuild) applyMasVersions(run, app)
     const root = join(app, 'Contents', 'Resources', 'local-runtime')
     const targets = readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory())
     if (targets.length !== 1 || !/^darwin-(?:x64|arm64)$/.test(targets[0].name)) {

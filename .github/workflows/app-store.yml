@@ -71,6 +71,8 @@ jobs:
           CSC_INSTALLER_LINK: build/installer.p12
           CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.MAS_CERTIFICATE_PASSWORD }}
           MAS_BUILD: 'true'
+          MAS_MARKETING_VERSION: ${{ inputs.marketing_version }}
+          MAS_BUILD_NUMBER: ${{ inputs.build_number }}
         run: |
           set -euo pipefail
           npm run build
