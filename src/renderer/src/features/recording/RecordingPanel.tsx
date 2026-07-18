@@ -1,23 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { AudioPolicy } from '../../../../shared/contracts/meeting'
 import type { SummaryTemplate, TemplatesApi } from '../../../../shared/contracts/template'
 import { InlineNotice } from '../../components/feedback/InlineNotice'
 import { ActionBar } from '../../components/layout/ActionBar'
 import { Button } from '../../components/ui/Button'
+import { Icon } from '../../components/ui/Icon'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import {
   RecordingTerminalError,
+  type MicrophoneOption,
   type RecordingSnapshot,
   type RecordingTerminalFailure,
 } from './mediaRecorderController'
 
 export interface RecordingPanelControls {
-  start(options?: { selectedTemplateId: string; audioPolicy: AudioPolicy }): Promise<void>
+  start(options?: { selectedTemplateId: string; audioPolicy: AudioPolicy; microphoneDeviceId: string | null; farFieldMode: boolean }): Promise<void>
   stop(): Promise<void>
   discard(): Promise<void>
   pause?(): Promise<void>
   resume?(): Promise<void>
   subscribe?(listener: (snapshot: RecordingSnapshot) => void): () => void
+  listMicrophones?(): Promise<MicrophoneOption[]>
 }
 
 interface RecordingPanelProps {
@@ -49,6 +52,9 @@ export function RecordingPanel({ controls, onNavigate, settingsFocusKey, templat
   const [templateItems, setTemplateItems] = useState<SummaryTemplate[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState('default')
   const [audioPolicy, setAudioPolicy] = useState<AudioPolicy>('delete_after_processing')
+  const [microphones, setMicrophones] = useState<MicrophoneOption[]>([])
+  const [microphoneDeviceId, setMicrophoneDeviceId] = useState('')
+  const [farFieldMode, setFarFieldMode] = useState(true)
 
   useEffect(() => controls.subscribe?.((next) => {
     setSnapshot(next)
@@ -68,11 +74,18 @@ export function RecordingPanel({ controls, onNavigate, settingsFocusKey, templat
     return () => { active = false }
   }, [templates])
 
+  const refreshMicrophones = useCallback(async () => {
+    if (controls.listMicrophones === undefined) return
+    try { setMicrophones(await controls.listMicrophones()) } catch { setMicrophones([]) }
+  }, [controls])
+
+  useEffect(() => { void refreshMicrophones() }, [refreshMicrophones])
+
   const start = async () => {
     setBusy(true)
     setError(null)
     try {
-      await controls.start({ selectedTemplateId, audioPolicy })
+      await controls.start({ selectedTemplateId, audioPolicy, microphoneDeviceId: microphoneDeviceId || null, farFieldMode })
       setPhase('recording')
     } catch (cause) {
       if (cause instanceof RecordingTerminalError && cause.state === 'capture_failed') {
@@ -136,8 +149,13 @@ export function RecordingPanel({ controls, onNavigate, settingsFocusKey, templat
       {phase === 'idle' && (
         <div className="recording-options">
           <div className="recording-fields">
-            {templates !== undefined && <label>요약 템플릿 <select aria-label="요약 템플릿" value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>{templateItems.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label>}
-            <label>원본 오디오 <select aria-label="원본 오디오" value={audioPolicy} onChange={(event) => setAudioPolicy(event.target.value as AudioPolicy)}><option value="delete_after_processing">처리 후 삭제</option><option value="keep">계속 보관</option></select></label>
+            {templates !== undefined && <label>요약 템플릿 <span className="recording-select-control"><select aria-label="요약 템플릿" value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>{templateItems.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select><Icon name="down" size={20} /></span></label>}
+            <label>원본 오디오 <span className="recording-select-control"><select aria-label="원본 오디오" value={audioPolicy} onChange={(event) => setAudioPolicy(event.target.value as AudioPolicy)}><option value="delete_after_processing">처리 후 삭제</option><option value="keep">계속 보관</option></select><Icon name="down" size={20} /></span></label>
+            <label className="recording-microphone-field">마이크 <span className="recording-select-control"><select aria-label="마이크" value={microphoneDeviceId} onFocus={() => void refreshMicrophones()} onChange={(event) => setMicrophoneDeviceId(event.target.value)}><option value="">시스템 기본 마이크</option>{microphones.map((microphone) => <option key={microphone.deviceId} value={microphone.deviceId}>{microphone.label}</option>)}</select><Icon name="down" size={20} /></span></label>
+            <div className="recording-quality-field">
+              <span>녹음 품질</span>
+              <label className="recording-checkbox"><input type="checkbox" checked={farFieldMode} onChange={(event) => setFarFieldMode(event.currentTarget.checked)} /><span><strong>원거리 음성 강화</strong><small>먼 목소리를 더 잘 담습니다.</small></span></label>
+            </div>
           </div>
           <ActionBar>
             <Button icon="microphone" variant="primary" disabled={busy || (templates !== undefined && templateItems.length === 0)} onClick={() => void start()}>

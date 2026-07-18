@@ -83,7 +83,7 @@ describe('common UI semantics', () => {
   it('labels privacy notices and only renders troubleshooting when supplied', () => {
     const { rerender } = render(
       <InlineNotice tone="privacy" title="클라우드 처리">
-        전사문이 전송됩니다.
+        대화 내용이 전송됩니다.
       </InlineNotice>,
     )
     expect(screen.getByRole('note', { name: '클라우드 처리' })).toBeVisible()

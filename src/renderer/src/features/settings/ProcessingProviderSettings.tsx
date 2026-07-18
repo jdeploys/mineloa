@@ -104,7 +104,7 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
       <div className="advanced-settings-content">
         <FieldHelp>변경 사항은 앞으로 시작하거나 다시 시도하는 처리에만 적용되며, 기존 결과는 다시 작성하지 않습니다.</FieldHelp>
         <div className="provider-grid">
-          <label>전사 방식
+          <label>텍스트 변환 방식
             <select value={value.transcriptionProvider} disabled={busy} onChange={(event) => void persist({ ...value, transcriptionProvider: event.target.value as ProcessingSettings['transcriptionProvider'] })}>
               {descriptors.filter((item) => item.stage === 'transcription').map((item) => <option key={`${item.stage}-${item.id}`} value={item.id}>{item.displayName}</option>)}
             </select>

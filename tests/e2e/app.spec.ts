@@ -46,14 +46,16 @@ test('launches the real built app securely and records fake microphone audio', a
     await expect(window.getByRole('heading', { name: '새 회의' })).toBeInViewport()
 
     await window.getByRole('button', { name: '녹음 시작' }).click()
-    await expect(window.getByText('녹음 중')).toBeVisible()
+    await expect(window.getByLabel('회의 녹음').getByText('녹음 중')).toBeVisible()
     await window.waitForTimeout(500)
     await window.getByRole('button', { name: '종료', exact: true }).click()
-    await expect(window.getByText('recorded')).toBeVisible()
-    await window.getByText('recorded').click()
-    await expect(window.getByRole('button', { name: '전사 및 요약 시작' })).toBeVisible()
-    await expect(window.getByRole('button', { name: '.nnote 내보내기' })).toBeVisible()
-    await expect(window.getByRole('button', { name: 'Markdown 내보내기' })).toBeVisible()
+    const recent = window.getByRole('region', { name: '최근 기록' })
+    const recordedMeeting = recent.getByRole('button', { name: /새 회의/ })
+    await expect(recordedMeeting.getByText('녹음 완료')).toBeVisible()
+    await recordedMeeting.click()
+    await expect(window.getByRole('button', { name: '회의록 만들기' })).toBeVisible()
+    await expect(window.getByRole('button', { name: '회의 내보내기' })).toHaveCount(0)
+    await expect(window.getByRole('button', { name: 'Markdown 내보내기' })).toHaveCount(0)
   } finally {
     await app.close()
   }

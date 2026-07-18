@@ -54,7 +54,7 @@ const safeDetails: Record<OpenAiErrorCode, { message: string; retryable: boolean
   },
   OPENAI_MALFORMED_RESPONSE: {
     message: 'OpenAI returned an invalid transcription response.',
-    retryable: false,
+    retryable: true,
   },
   OPENAI_MALFORMED_SUMMARY: {
     message: 'OpenAI returned an invalid summary response.',

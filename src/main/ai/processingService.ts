@@ -25,6 +25,12 @@ function safeFailure(error: unknown): { code: string; message: string; retryable
   return { code: 'PROCESSING_FAILED', message: 'Processing failed. Try again.', retryable: true }
 }
 
+function canRetry(error: { code: string; retryable: boolean }): boolean {
+  // Releases before the diarized-duration fallback persisted this code as
+  // non-retryable. Keep those saved recordings recoverable after upgrading.
+  return error.retryable || error.code === 'OPENAI_MALFORMED_RESPONSE'
+}
+
 export class ProcessingService {
   private readonly active = new Set<string>()
   private readonly listeners = new Set<Listener>()
@@ -57,7 +63,7 @@ export class ProcessingService {
     if (meeting.status === 'failed') {
       const stage = attempt?.stage === 'summarizing' ? 'summarizing' : 'transcribing'
       const error = attempt?.error ?? { code: 'PROCESSING_FAILED', message: 'Processing failed. Try again.', retryable: true }
-      return { meetingId, state: 'failed', failedStage: stage, retryable: error.retryable, audioRequired: stage === 'transcribing', error: { code: error.code, message: error.message } }
+      return { meetingId, state: 'failed', failedStage: stage, retryable: canRetry(error), audioRequired: stage === 'transcribing', error: { code: error.code, message: error.message } }
     }
     if (meeting.status === 'transcribing' || meeting.status === 'summarizing') {
       return { meetingId, state: meeting.status, failedStage: null, retryable: false, audioRequired: meeting.status === 'transcribing', error: null }

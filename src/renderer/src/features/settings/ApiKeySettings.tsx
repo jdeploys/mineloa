@@ -107,7 +107,7 @@ export function ApiKeySettings({ settings }: ApiKeySettingsProps) {
             value={value}
             onChange={(event) => setValue(event.target.value)}
           />
-          <ActionBar>
+          <ActionBar danger={status?.configured ? <Button icon="delete" variant="danger" type="button" disabled={busy} onClick={() => void remove()}>API 키 삭제</Button> : undefined}>
             <Button icon="key" variant="primary" type="submit" disabled={busy || value.length === 0}>
               API 키 저장
             </Button>
@@ -115,12 +115,6 @@ export function ApiKeySettings({ settings }: ApiKeySettingsProps) {
         </form>
         {error ? <p role="alert" className="settings-alert">{error}</p> : null}
       </SurfaceCard>
-      <section className="danger-zone" aria-labelledby="api-key-danger-title">
-        <div><strong id="api-key-danger-title">저장된 API 키 삭제</strong><p>이 기기의 보안 저장소에서만 제거합니다.</p></div>
-        <ActionBar>
-          <Button icon="delete" variant="danger" type="button" disabled={busy || !status?.configured} onClick={remove}>API 키 삭제</Button>
-        </ActionBar>
-      </section>
     </section>
   )
 }

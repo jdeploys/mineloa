@@ -7,6 +7,7 @@ import type { SummaryRequest } from './providers/providerPorts'
 
 export interface TranscriptionRequest {
   filePath: string
+  recordingDurationSeconds?: number
   model: 'gpt-4o-transcribe-diarize'
   responseFormat: 'diarized_json'
   chunkingStrategy: 'auto'
@@ -37,7 +38,7 @@ export type OpenAiTranscriptionClientFactory = (apiKey: string) => OpenAiTranscr
 const createClient: OpenAiTranscriptionClientFactory = (apiKey) => new OpenAI({ apiKey })
 
 const responseSchema = z.object({
-  duration: z.number().finite().nonnegative(),
+  duration: z.number().finite().nonnegative().optional(),
   segments: z.array(
     z.object({
       speaker: z.string().min(1),
@@ -76,19 +77,27 @@ export class OpenAiGateway implements OpenAiGatewayPort {
       throw safeOpenAiError('OPENAI_MALFORMED_RESPONSE')
     }
 
+    // The non-streaming diarized endpoint can omit its documented top-level
+    // duration. The recording service owns a durable duration for every part,
+    // so use that instead of rejecting an otherwise valid transcript.
+    const duration = request.recordingDurationSeconds ?? parsed.data.duration
+    if (duration === undefined || !Number.isFinite(duration) || duration < 0) {
+      throw safeOpenAiError('OPENAI_MALFORMED_RESPONSE')
+    }
+
     let previousStart = 0
     for (const segment of parsed.data.segments) {
       if (
         segment.end < segment.start ||
         segment.start < previousStart ||
-        segment.end > parsed.data.duration + 0.001
+        segment.end > duration + 0.001
       ) {
         throw safeOpenAiError('OPENAI_MALFORMED_RESPONSE')
       }
       previousStart = segment.start
     }
     return {
-      durationSeconds: parsed.data.duration,
+      durationSeconds: duration,
       segments: parsed.data.segments.map((segment) => ({
         speaker: segment.speaker,
         startSeconds: segment.start,

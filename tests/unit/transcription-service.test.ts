@@ -63,6 +63,7 @@ describe('OpenAiGateway', () => {
     })
     expect(gateway.transcribe).toHaveBeenCalledWith({
       filePath: 'meeting.webm',
+      recordingDurationSeconds: 99,
       model: 'gpt-4o-transcribe-diarize',
       responseFormat: 'diarized_json',
       chunkingStrategy: 'auto',
@@ -176,6 +177,42 @@ describe('OpenAiGateway', () => {
       code: 'OPENAI_MALFORMED_RESPONSE',
       message: 'OpenAI returned an invalid transcription response.',
     })
+  })
+
+  it('uses the durable recording duration when a valid diarized response omits duration', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'nnote-gateway-duration-'))
+    directories.push(root)
+    const filePath = join(root, 'meeting.webm')
+    writeFileSync(filePath, Buffer.from([1]))
+    const create = vi.fn(async (input: unknown) => {
+      for await (const _chunk of (input as { file: AsyncIterable<unknown> }).file) {
+        // consume the upload stream
+      }
+      return {
+        text: 'Hello',
+        segments: [{
+          type: 'transcript.text.segment', id: 'seg_001', speaker: 'A',
+          start: 0, end: 1, text: 'Hello',
+        }],
+        usage: { type: 'tokens', input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+      }
+    })
+    const gateway = new OpenAiGateway(
+      { get: vi.fn().mockResolvedValue('placeholder'), set: vi.fn(), delete: vi.fn() },
+      () => ({ audio: { transcriptions: { create } } }),
+    )
+
+    await expect(gateway.transcribe({
+      filePath,
+      recordingDurationSeconds: 31.792,
+      model: 'gpt-4o-transcribe-diarize',
+      responseFormat: 'diarized_json',
+      chunkingStrategy: 'auto',
+    })).resolves.toEqual({
+      durationSeconds: 31.792,
+      segments: [{ speaker: 'A', startSeconds: 0, endSeconds: 1, text: 'Hello' }],
+    })
+    expect(create).toHaveBeenCalledWith(expect.not.objectContaining({ recordingDurationSeconds: expect.anything() }))
   })
 
   it('never rethrows a raw SDK error message', async () => {

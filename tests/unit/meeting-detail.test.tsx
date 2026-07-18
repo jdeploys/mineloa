@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MeetingDocument } from '../../src/shared/contracts/meetingsApi'
@@ -34,7 +34,35 @@ describe('single-document meeting detail', () => {
     const main = screen.getByRole('main')
     const text = main.textContent ?? ''
     expect(text.indexOf('오디오 및 처리')).toBeLessThan(text.indexOf('핵심 요약'))
-    expect(screen.getByText('completed')).toHaveAttribute('data-tone', 'success')
+    expect(screen.getByLabelText('회의록 생성 완료')).toHaveAttribute('data-tone', 'success')
+  })
+
+  it('uses the stored recording duration for custom playback progress', () => {
+    render(<MeetingDetail document={documentFixture()} onBack={vi.fn()} onRenameSpeaker={vi.fn()} />)
+    const audio = screen.getByLabelText('회의 오디오') as HTMLAudioElement
+    const range = screen.getByRole('slider', { name: '회의 오디오 재생 위치' })
+
+    expect(range).toHaveAttribute('max', '65000')
+    expect(screen.getByText('0:00 / 1:05')).toBeInTheDocument()
+    Object.defineProperty(audio, 'currentTime', { configurable: true, value: 12 })
+    fireEvent.timeUpdate(audio)
+    expect(screen.getByText('0:12 / 1:05')).toBeInTheDocument()
+  })
+
+  it('renames the meeting inline without a separate save action', async () => {
+    const user = userEvent.setup()
+    const source = documentFixture()
+    const renameMeeting = vi.fn(async (_meetingId: string, title: string) => ({ ...source.meeting, title }))
+    render(<MeetingDetail document={source} onBack={vi.fn()} onRenameMeeting={renameMeeting} onRenameSpeaker={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: '제품 회의 제목 수정' }))
+    const input = screen.getByLabelText('회의 제목')
+    await user.clear(input)
+    await user.type(input, '고객 인터뷰{Enter}')
+
+    expect(renameMeeting).toHaveBeenCalledWith('meeting-1', '고객 인터뷰')
+    expect(await screen.findByRole('button', { name: '고객 인터뷰 제목 수정' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: '회의 제목 저장' })).not.toBeInTheDocument()
   })
 
   it('keeps retry, speaker rename and both export actions reachable', async () => {
@@ -51,14 +79,17 @@ describe('single-document meeting detail', () => {
       exportMarkdown: vi.fn(async () => ({ status: 'success' as const })), importMeeting: vi.fn(),
     }
     render(<MeetingDetail document={source} initialProcessingStatus={{ meetingId: 'meeting-1', state: 'failed', failedStage: 'summarizing', retryable: true, audioRequired: false, error: { code: 'OPENAI_NETWORK', message: 'retry' } }} processing={processing} archive={archive} onRefresh={vi.fn()} onBack={vi.fn()} onRenameSpeaker={rename} />)
-    for (const name of ['요약 다시 시도', '화자 B 이름 저장', '.nnote 내보내기', 'Markdown 내보내기']) {
+    for (const name of ['회의록 작성 다시 시도', '전체 적용', '회의 내보내기', 'Markdown 내보내기']) {
       expect(screen.getByRole('button', { name }).querySelector('.ui-icon')).toBeVisible()
     }
-    await user.click(screen.getByRole('button', { name: '요약 다시 시도' }))
+    for (const name of ['회의 내보내기', 'Markdown 내보내기']) {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('data-variant', 'tertiary')
+    }
+    await user.click(screen.getByRole('button', { name: '회의록 작성 다시 시도' }))
     await user.clear(screen.getByLabelText('화자 B 이름'))
     await user.type(screen.getByLabelText('화자 B 이름'), '민지')
-    await user.click(screen.getByRole('button', { name: '화자 B 이름 저장' }))
-    await user.click(screen.getByRole('button', { name: '.nnote 내보내기' }))
+    await user.click(screen.getByRole('button', { name: '전체 적용' }))
+    await user.click(screen.getByRole('button', { name: '회의 내보내기' }))
     await user.click(screen.getByRole('button', { name: 'Markdown 내보내기' }))
     expect(processing.retry).toHaveBeenCalledTimes(1)
     expect(rename).toHaveBeenCalledTimes(1)
@@ -69,7 +100,7 @@ describe('single-document meeting detail', () => {
   it('meeting-detail-shows-completed-document-in-approved-order', () => {
     render(<MeetingDetail document={documentFixture()} onBack={vi.fn()} onRenameSpeaker={vi.fn()} />)
     const headings = screen.getAllByRole('heading').map((node) => node.textContent)
-    expect(headings).toEqual(['제품 회의', '오디오 및 처리', '핵심 요약', '결정사항', '할 일', '주요 논의', '화자 이름', '전체 전사문'])
+    expect(headings).toEqual(['제품 회의', '오디오 및 처리', '핵심 요약', '결정사항', '할 일', '주요 논의', '화자 이름', '전체 대화 내용'])
     expect(screen.getByLabelText('회의 오디오')).toHaveAttribute('src', 'nnote-media://meeting/bWVldGluZy0x')
     expect(screen.getByRole('article', { name: '회의 문서' })).toHaveClass('meeting-document')
     expect(screen.getByText('Markdown 미리보기').closest('details')).not.toHaveAttribute('open')
@@ -87,7 +118,7 @@ describe('single-document meeting detail', () => {
 
     await user.clear(screen.getByLabelText('화자 B 이름'))
     await user.type(screen.getByLabelText('화자 B 이름'), '민지')
-    await user.click(screen.getByRole('button', { name: '화자 B 이름 저장' }))
+    await user.click(screen.getByRole('button', { name: '전체 적용' }))
 
     expect(await screen.findAllByText(/민지/)).not.toHaveLength(0)
     expect(screen.getByText('민지가 제안을 설명했습니다.')).toBeVisible()
@@ -97,13 +128,33 @@ describe('single-document meeting detail', () => {
     expect(source.transcript[0]).toMatchObject({ text: '원본 발언입니다.', startMs: 1_000, endMs: 2_500 })
   })
 
+  it('applies every changed speaker name with one action', async () => {
+    const user = userEvent.setup()
+    const source = documentFixture()
+    source.speakers.push({ id: '0:C', meetingId: 'meeting-1', displayName: '화자 C' })
+    const rename = vi.fn(async (_meetingId: string, speakerId: string, displayName: string) => ({
+      ...source.speakers.find((speaker) => speaker.id === speakerId)!, displayName,
+    }))
+    render(<MeetingDetail document={source} onBack={vi.fn()} onRenameSpeaker={rename} />)
+
+    await user.clear(screen.getByLabelText('화자 B 이름'))
+    await user.type(screen.getByLabelText('화자 B 이름'), '민지')
+    await user.clear(screen.getByLabelText('화자 C 이름'))
+    await user.type(screen.getByLabelText('화자 C 이름'), '준호')
+    expect(screen.getAllByRole('button', { name: '전체 적용' })).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: '전체 적용' }))
+
+    expect(rename).toHaveBeenNthCalledWith(1, 'meeting-1', '0:B', '민지')
+    expect(rename).toHaveBeenNthCalledWith(2, 'meeting-1', '0:C', '준호')
+  })
+
   it('keeps transcript text and timestamps visible after a speaker rename', async () => {
     const source = documentFixture()
     render(<MeetingDetail document={source} onBack={vi.fn()} onRenameSpeaker={async (_m, _s, name) => ({ ...source.speakers[0], displayName: name })} />)
     const user = userEvent.setup()
     await user.clear(screen.getByLabelText('화자 B 이름'))
     await user.type(screen.getByLabelText('화자 B 이름'), '민지')
-    await user.click(screen.getByRole('button', { name: '화자 B 이름 저장' }))
+    await user.click(screen.getByRole('button', { name: '전체 적용' }))
     expect(screen.getByText('00:01–00:02')).toBeVisible()
     expect(screen.getByText('원본 발언입니다.')).toBeVisible()
   })
@@ -116,10 +167,19 @@ describe('single-document meeting detail', () => {
     recorded.summarySections = []
     recorded.actionItems = []
     const completed = documentFixture()
-    const { rerender } = render(<MeetingDetail document={recorded} onBack={vi.fn()} onRenameSpeaker={vi.fn()} />)
+    const archive = { exportMeeting: vi.fn(), exportMarkdown: vi.fn(), importMeeting: vi.fn() }
+    const { rerender } = render(<MeetingDetail document={recorded} archive={archive} onBack={vi.fn()} onRenameSpeaker={vi.fn()} />)
 
-    rerender(<MeetingDetail document={completed} onBack={vi.fn()} onRenameSpeaker={vi.fn()} />)
+    expect(screen.queryByRole('article', { name: '회의 문서' })).not.toBeInTheDocument()
+    expect(screen.queryByText('화자 이름')).not.toBeInTheDocument()
+    expect(screen.queryByText('전체 대화 내용')).not.toBeInTheDocument()
+    expect(screen.queryByText('Markdown 미리보기')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '회의 내보내기' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Markdown 내보내기' })).not.toBeInTheDocument()
+    rerender(<MeetingDetail document={completed} archive={archive} onBack={vi.fn()} onRenameSpeaker={vi.fn()} />)
 
+    expect(screen.getByRole('button', { name: '회의 내보내기' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Markdown 내보내기' })).toBeVisible()
     expect(screen.getByText('화자 B가 제안을 설명했습니다.')).toBeVisible()
     expect(screen.getByText('담당: 화자 B')).toBeVisible()
     expect(screen.getByLabelText('화자 B 이름')).toHaveValue('화자 B')
@@ -138,7 +198,7 @@ describe('single-document meeting detail', () => {
     const { rerender } = render(<MeetingDetail document={source} onBack={vi.fn()} onRenameSpeaker={rename} />)
     await user.clear(screen.getByLabelText('화자 B 이름'))
     await user.type(screen.getByLabelText('화자 B 이름'), '민지')
-    await user.click(screen.getByRole('button', { name: '화자 B 이름 저장' }))
+    await user.click(screen.getByRole('button', { name: '전체 적용' }))
     expect(await screen.findByText('민지가 제안을 설명했습니다.')).toBeVisible()
 
     rerender(<MeetingDetail document={{ ...source }} onBack={vi.fn()} onRenameSpeaker={rename} />)
@@ -178,14 +238,14 @@ describe('single-document meeting detail', () => {
     }
     render(<MeetingDetail document={source} initialProcessingStatus={{ meetingId: 'meeting-1', state: 'recorded', failedStage: null, retryable: false, audioRequired: true, error: null }} processing={processing} archive={archive} onRefresh={vi.fn()} onBack={vi.fn()} onRenameSpeaker={vi.fn()} />)
 
-    expect(screen.getAllByLabelText(/회의 오디오 파트/)).toHaveLength(2)
+    expect(screen.getAllByLabelText(/회의 오디오 파트/, { selector: 'audio' })).toHaveLength(2)
     const headings = screen.getAllByRole('heading').map((node) => node.textContent)
     expect(headings.indexOf('위험 요소')).toBeLessThan(headings.indexOf('후속 조치'))
     expect(headings.indexOf('후속 조치')).toBeLessThan(headings.indexOf('결론'))
     expect(screen.getAllByText(/초안 작성/)[0]).toBeVisible()
-    await user.click(screen.getByRole('button', { name: '전사 및 요약 시작' }))
+    await user.click(screen.getByRole('button', { name: '회의록 만들기' }))
     expect(processing.process).toHaveBeenCalledWith('meeting-1')
-    await user.click(screen.getByRole('button', { name: '.nnote 내보내기' }))
+    await user.click(screen.getByRole('button', { name: '회의 내보내기' }))
     await user.click(screen.getByRole('button', { name: 'Markdown 내보내기' }))
     expect(archive.exportMeeting).toHaveBeenCalledWith('meeting-1')
     expect(archive.exportMarkdown).toHaveBeenCalledWith('meeting-1')

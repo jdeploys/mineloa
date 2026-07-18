@@ -179,6 +179,7 @@ describe('RecordingPanel', () => {
     const controls = {
       start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined), discard: vi.fn(async () => undefined),
       pause: vi.fn(async () => undefined), resume: vi.fn(async () => undefined),
+      listMicrophones: vi.fn(async () => [{ deviceId: 'room-mic', label: '회의실 마이크' }]),
       subscribe: vi.fn((next: (value: unknown) => void) => { listener = next; return () => undefined }),
     }
     const templates = {
@@ -190,8 +191,13 @@ describe('RecordingPanel', () => {
     render(<RecordingPanel controls={controls as never} templates={templates} onNavigate={vi.fn()} />)
     await user.selectOptions(await screen.findByLabelText('요약 템플릿'), 'custom')
     await user.selectOptions(screen.getByLabelText('원본 오디오'), 'keep')
+    await screen.findByRole('option', { name: '회의실 마이크' })
+    await user.selectOptions(screen.getByLabelText('마이크'), 'room-mic')
+    expect(screen.getByText('녹음 품질')).toBeVisible()
+    expect(screen.getByText('먼 목소리를 더 잘 담습니다.')).toBeVisible()
+    expect(screen.getByRole('checkbox', { name: /원거리 음성 강화/ })).toBeChecked()
     await user.click(screen.getByRole('button', { name: '녹음 시작' }))
-    expect(controls.start).toHaveBeenCalledWith({ selectedTemplateId: 'custom', audioPolicy: 'keep' })
+    expect(controls.start).toHaveBeenCalledWith({ selectedTemplateId: 'custom', audioPolicy: 'keep', microphoneDeviceId: 'room-mic', farFieldMode: true })
 
     listener?.({ phase: 'recording', meetingId: 'm1', durationMs: 65_000, totalBytes: 23 * 1024 * 1024, warn: true, activePartIndex: 1, partCount: 2, microphone: 'active', localSave: 'saved' })
     expect(await screen.findByText('1:05')).toBeInTheDocument()

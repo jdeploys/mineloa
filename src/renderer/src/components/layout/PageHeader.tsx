@@ -5,7 +5,7 @@ export const PageHeader = forwardRef<
   HTMLHeadingElement,
   {
     eyebrow?: string
-    title: string
+    title: ReactNode
     description?: string
     backLabel?: string
     onBack?(): void

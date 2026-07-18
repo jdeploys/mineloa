@@ -76,10 +76,11 @@ export function Icon({ name, size = 18, className = '' }: {
   className?: string
 }) {
   const Component = icons[name]
+  const stateClass = name === 'processing' ? 'ui-icon-processing' : ''
   return (
     <Component
       aria-hidden="true"
-      className={`ui-icon ${className}`.trim()}
+      className={`ui-icon ${stateClass} ${className}`.trim()}
       focusable="false"
       size={size}
       strokeWidth={2}

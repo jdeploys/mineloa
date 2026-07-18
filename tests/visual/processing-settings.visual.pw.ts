@@ -18,7 +18,7 @@ async function open(page: Page, state: string, expanded: boolean, theme: Fixture
   await expect(apiCard).toContainText('저장된 API 키 삭제')
   await expect(apiCard.getByText('설정됨', { exact: true })).toBeVisible()
   await expect(apiCard.getByLabel('OpenAI API 키')).toBeVisible()
-  await page.getByLabel('전사 방식').waitFor({ state: 'attached' })
+  await page.getByLabel('텍스트 변환 방식').waitFor({ state: 'attached' })
   if (expanded) await page.getByText('고급 처리 옵션', { exact: true }).click()
   const markers: Record<string, string> = {
     'provider-defaults': 'OpenAI API · OpenAI API',
@@ -30,7 +30,7 @@ async function open(page: Page, state: string, expanded: boolean, theme: Fixture
   }
   await expect(page.getByText(markers[state], { exact: true }).first()).toBeVisible()
   if (expanded) {
-    await expect(page.getByLabel('전사 방식')).toBeVisible()
+    await expect(page.getByLabel('텍스트 변환 방식')).toBeVisible()
     await expect(page.getByLabel('요약 방식')).toBeVisible()
   }
   await expect.poll(() => page.evaluate(({ expanded }) => {

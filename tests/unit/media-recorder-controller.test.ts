@@ -61,7 +61,7 @@ function createHarness() {
     getUserMedia: vi.fn(async () => stream),
     createRecorder: (receivedStream, options) => {
       expect(receivedStream).toBe(stream)
-      expect(options).toEqual({ mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 20_000 })
+      expect(options).toEqual({ mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 64_000 })
       recorder = new FakeMediaRecorder()
       return recorder as unknown as MediaRecorder
     },
@@ -81,6 +81,57 @@ function createHarness() {
 }
 
 describe('MediaRecorderController', () => {
+  it('uses the selected microphone and preserves quiet distant speech in far-field mode', async () => {
+    const harness = createHarness()
+    const getUserMedia = vi.fn(async () => ({ getTracks: () => [harness.track] }) as unknown as MediaStream)
+    const recorder = new FakeMediaRecorder()
+    const controller = new MediaRecorderController(harness.recording, {
+      getUserMedia,
+      createRecorder: (_stream, options) => {
+        expect(options.audioBitsPerSecond).toBe(64_000)
+        return recorder as unknown as MediaRecorder
+      },
+      now: () => 0,
+    })
+
+    await controller.start('meeting-1', { microphoneDeviceId: 'room-mic', farFieldMode: true })
+
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: {
+      deviceId: { exact: 'room-mic' }, echoCancellation: true,
+      noiseSuppression: false, autoGainControl: true, channelCount: 1,
+    } })
+    await controller.discard()
+  })
+
+  it('publishes elapsed time between ten-second recording chunks and freezes it while paused', async () => {
+    vi.useFakeTimers()
+    try {
+      const harness = createHarness()
+      const snapshots: number[] = []
+      harness.controller.subscribe((snapshot) => snapshots.push(snapshot.durationMs))
+
+      await harness.controller.start('meeting-1')
+      harness.setClock(1_100)
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(snapshots.at(-1)).toBe(1_100)
+      expect(harness.recording.appendChunk).not.toHaveBeenCalled()
+
+      await harness.controller.pause()
+      harness.setClock(5_000)
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(snapshots.at(-1)).toBe(1_100)
+
+      await harness.controller.resume()
+      harness.setClock(6_000)
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(snapshots.at(-1)).toBe(2_100)
+
+      await harness.controller.discard()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('auto-stops successfully when Main clamps a crossing dataavailable chunk to two hours', async () => {
     const automaticStop = vi.fn()
     const harness = createHarness()

@@ -3,6 +3,15 @@ import { AudioPolicySchema, MeetingStatusSchema, SpeakerSchema, TranscriptSegmen
 import { StoredActionItemSchema, StoredSummarySectionSchema } from './summary'
 
 export const MeetingIdSchema = z.string().trim().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/, 'Meeting id must be opaque')
+export const MeetingTitleSchema = z.string().trim().min(1).max(200)
+export const MeetingSearchInputSchema = z.object({
+  query: z.string().trim().max(200).default(''),
+  from: z.string().datetime({ offset: true }).nullable().default(null),
+  toExclusive: z.string().datetime({ offset: true }).nullable().default(null),
+}).strict().refine(({ from, toExclusive }) => from === null || toExclusive === null || from < toExclusive, {
+  message: 'Search start must precede search end',
+})
+export type MeetingSearchInput = z.infer<typeof MeetingSearchInputSchema>
 
 export const PublicMeetingSchema = z.object({
   id: MeetingIdSchema,
@@ -48,7 +57,9 @@ export type CreateRecordingMeetingInput = z.input<typeof CreateRecordingMeetingI
 
 export interface MeetingsApi {
   list(): Promise<PublicMeeting[]>
+  search(input: MeetingSearchInput): Promise<PublicMeeting[]>
   get(meetingId: string): Promise<MeetingDocument>
   createRecording(input: CreateRecordingMeetingInput): Promise<PublicMeeting>
+  renameMeeting(meetingId: string, title: string): Promise<PublicMeeting>
   renameSpeaker(meetingId: string, speakerId: string, displayName: string): Promise<z.infer<typeof SpeakerSchema>>
 }

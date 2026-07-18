@@ -37,7 +37,7 @@ export function CodexCliStatus({ descriptor, onAvailabilityChanged, pending, dis
   return <section className="cli-status" aria-label="Codex CLI 상태" aria-busy={pending}>
     <FieldHelp>Mineloa는 전역 Codex 설정이나 로그인 정보를 변경하지 않습니다.</FieldHelp>
     {descriptor.privacy === 'text_cloud' && <PrivacyNotice title="클라우드 처리">
-      <p>전사문이 Codex 계정으로 전송됩니다.</p>
+      <p>대화 내용이 Codex 계정으로 전송됩니다.</p>
       <p>로컬 추론이 아닌 클라우드 처리입니다.</p>
     </PrivacyNotice>}
     <StatusIndicator available={descriptor.availability.available}>{status}</StatusIndicator>

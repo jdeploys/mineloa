@@ -132,12 +132,14 @@ function desktopApiFor(state: string): DesktopApi {
     archive,
     meetings: {
       list: async () => meetings as PublicMeeting[],
+      search: async () => meetings as PublicMeeting[],
       get: async () => detail,
       createRecording: async (input) => ({
         ...meeting('active-meeting', input.title, 'recorded'),
         audioPolicy: input.audioPolicy ?? 'delete_after_processing',
         selectedTemplateId: input.selectedTemplateId ?? null,
       }),
+      renameMeeting: async (_meetingId, title) => ({ ...detail.meeting, title }),
       renameSpeaker: async (_meetingId, speakerId, displayName) => ({
         id: speakerId,
         meetingId: detail.meeting.id,

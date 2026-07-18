@@ -15,6 +15,7 @@ import {
   type StoredSummarySection,
 } from '../../shared/contracts/summary'
 import { assertMeetingTransition } from '../domain/meetingState'
+import type { MeetingSearchInput } from '../../shared/contracts/meetingsApi'
 
 interface MeetingRow {
   id: string
@@ -208,6 +209,49 @@ export class MeetingRepository {
       .prepare("SELECT * FROM meetings WHERE status != 'deleted' ORDER BY created_at DESC, id DESC LIMIT ?")
       .all(limit) as MeetingRow[]
     return rows.map(toMeeting)
+  }
+
+  searchRecent(input: MeetingSearchInput, limit = 100): Meeting[] {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
+      throw new Error('Recent meeting limit must be between 1 and 500')
+    }
+    const conditions = ["m.status != 'deleted'"]
+    const parameters: Array<string | number> = []
+    if (input.query.length > 0) {
+      conditions.push(`(
+        instr(lower(m.title), lower(?)) > 0 OR
+        EXISTS (SELECT 1 FROM transcript_segments t WHERE t.meeting_id = m.id AND instr(lower(t.text), lower(?)) > 0) OR
+        EXISTS (SELECT 1 FROM summary_sections s WHERE s.meeting_id = m.id AND instr(lower(s.content_json), lower(?)) > 0) OR
+        EXISTS (SELECT 1 FROM action_items a WHERE a.meeting_id = m.id AND instr(lower(a.content), lower(?)) > 0)
+      )`)
+      parameters.push(input.query, input.query, input.query, input.query)
+    }
+    if (input.from !== null) {
+      conditions.push('m.created_at >= ?')
+      parameters.push(input.from)
+    }
+    if (input.toExclusive !== null) {
+      conditions.push('m.created_at < ?')
+      parameters.push(input.toExclusive)
+    }
+    const rows = this.database.prepare(
+      `SELECT m.* FROM meetings m
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY m.created_at DESC, m.id DESC
+       LIMIT ?`,
+    ).all(...parameters, limit) as MeetingRow[]
+    return rows.map(toMeeting)
+  }
+
+  renameMeeting(id: string, title: string): Meeting {
+    return inTransaction(this.database, () => {
+      const meeting = this.requireById(id)
+      if (meeting.status === 'deleted') throw new Error('Deleted meetings cannot be renamed')
+      this.database
+        .prepare('UPDATE meetings SET title = ?, updated_at = ? WHERE id = ?')
+        .run(title, new Date().toISOString(), id)
+      return this.requireById(id)
+    })
   }
 
   replaceRecordingParts(meetingId: string, values: readonly RecordingPartInput[]): RecordingPart[] {

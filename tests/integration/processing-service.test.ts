@@ -118,6 +118,28 @@ describe('ProcessingService', () => {
     h.database.close()
   })
 
+  it('retries saved malformed-response failures from releases before the duration fallback', async () => {
+    const h = harness()
+    const attempt = h.meetings.beginProcessingAttempt('meeting-1', 'transcribing', PROCESS_OWNER_ID)
+    h.meetings.beginTranscription('meeting-1')
+    h.meetings.failProcessing('meeting-1')
+    h.meetings.finishProcessingAttempt(attempt.id, {
+      succeeded: false,
+      error: {
+        code: 'OPENAI_MALFORMED_RESPONSE',
+        message: 'OpenAI returned an invalid transcription response.',
+        retryable: false,
+      },
+    })
+
+    expect(h.service.getStatus('meeting-1')).toMatchObject({
+      state: 'failed', failedStage: 'transcribing', retryable: true, audioRequired: true,
+    })
+    await h.service.retry('meeting-1')
+    expect(h.transcribe).toHaveBeenCalledOnce()
+    h.database.close()
+  })
+
   it('keeps the orchestration attempt authoritative when transcription records its failure', async () => {
     const h = harness()
     h.transcribe.mockImplementationOnce(async () => {

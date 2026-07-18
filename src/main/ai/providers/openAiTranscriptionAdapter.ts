@@ -35,6 +35,9 @@ export class OpenAiTranscriptionAdapter implements TranscriptionProvider {
     try {
       const response = await this.gateway.transcribe({
         filePath: request.filePath,
+        ...(request.recordingDurationSeconds === undefined
+          ? {}
+          : { recordingDurationSeconds: request.recordingDurationSeconds }),
         model: 'gpt-4o-transcribe-diarize',
         responseFormat: 'diarized_json',
         chunkingStrategy: 'auto',

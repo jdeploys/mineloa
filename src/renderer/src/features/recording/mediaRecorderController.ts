@@ -6,12 +6,24 @@ import {
 } from '../../../../shared/contracts/recording'
 
 const TIMESLICE_MS = 10_000
-const AUDIO_BITS_PER_SECOND = 20_000
+const ELAPSED_UPDATE_INTERVAL_MS = 250
+const AUDIO_BITS_PER_SECOND = 64_000
+
+export interface RecordingCaptureOptions {
+  microphoneDeviceId?: string | null
+  farFieldMode?: boolean
+}
+
+export interface MicrophoneOption {
+  deviceId: string
+  label: string
+}
 
 interface MediaRecorderDependencies {
   getUserMedia(constraints: MediaStreamConstraints): Promise<MediaStream>
   createRecorder(stream: MediaStream, options: MediaRecorderOptions): MediaRecorder
   now(): number
+  enumerateDevices?(): Promise<MediaDeviceInfo[]>
 }
 
 export interface RecordingSnapshot {
@@ -34,6 +46,7 @@ const defaultDependencies: MediaRecorderDependencies = {
   getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
   createRecorder: (stream, options) => new MediaRecorder(stream, options),
   now: () => performance.now(),
+  enumerateDevices: () => navigator.mediaDevices.enumerateDevices(),
 }
 
 export type RecordingTerminalFailure = 'stop_failed' | 'discard_failed' | 'capture_failed'
@@ -78,6 +91,7 @@ export class MediaRecorderController {
   private rollPromise: Promise<void> | null = null
   private automaticStopStarted = false
   private durationLimitReached = false
+  private elapsedTimer: ReturnType<typeof setInterval> | null = null
   private snapshot: RecordingSnapshot = {
     phase: 'idle', meetingId: null, durationMs: 0, totalBytes: 0, warn: false,
     activePartIndex: 0, partCount: 0, microphone: 'inactive', localSave: 'idle',
@@ -98,14 +112,30 @@ export class MediaRecorderController {
 
   getSnapshot(): RecordingSnapshot { return this.snapshot }
 
-  async start(meetingId: string): Promise<void> {
+  async listMicrophones(): Promise<MicrophoneOption[]> {
+    const devices = await this.dependencies.enumerateDevices?.() ?? []
+    return devices
+      .filter((device) => device.kind === 'audioinput' && device.deviceId !== 'default')
+      .map((device, index) => ({
+        deviceId: device.deviceId,
+        label: device.label.trim() || `마이크 ${index + 1}`,
+      }))
+  }
+
+  async start(meetingId: string, capture: RecordingCaptureOptions = {}): Promise<void> {
     if (this.state !== 'idle') throw new Error(`Recording is ${this.state}`)
     this.state = 'starting'
 
     let mainSessionStarted = false
     try {
       this.stream = await this.dependencies.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          deviceId: capture.microphoneDeviceId ? { exact: capture.microphoneDeviceId } : undefined,
+          echoCancellation: true,
+          noiseSuppression: capture.farFieldMode === true ? false : true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
       })
       this.appendQueue = Promise.resolve()
       this.appendFailure = null
@@ -122,6 +152,7 @@ export class MediaRecorderController {
       this.startRecorderPart()
       this.state = 'recording'
       this.publish({ phase: 'recording', microphone: 'active', localSave: 'saved' })
+      this.startElapsedTimer()
     } catch (error) {
       this.cleanupCapture()
       if (mainSessionStarted) {
@@ -161,6 +192,7 @@ export class MediaRecorderController {
       this.startRecorderPart()
       this.state = 'recording'
       this.publish({ phase: 'recording', microphone: 'active', localSave: 'saved' })
+      this.startElapsedTimer()
     } catch (error) {
       this.cleanupCapture()
       this.clearSession()
@@ -174,6 +206,8 @@ export class MediaRecorderController {
     recorder.pause()
     this.state = 'paused'
     this.pausedAt = this.dependencies.now()
+    this.stopElapsedTimer()
+    this.publish({ durationMs: this.currentDurationMs() })
     await this.appendQueue
     if (this.appendFailure !== null) throw this.appendFailure
     await this.recording.pause(meetingId)
@@ -191,6 +225,7 @@ export class MediaRecorderController {
     }
     this.state = 'recording'
     this.publish({ phase: 'recording', microphone: 'active', localSave: 'saved' })
+    this.startElapsedTimer()
   }
 
   stop(): Promise<void> {
@@ -440,7 +475,9 @@ export class MediaRecorderController {
   private applyProgress(progress: RecordingProgress): void {
     this.publish({
       meetingId: this.meetingId,
-      durationMs: progress.durationMs,
+      durationMs: this.state === 'recording' || this.state === 'paused' || this.state === 'rolling'
+        ? Math.max(progress.durationMs, this.snapshot.durationMs)
+        : progress.durationMs,
       totalBytes: progress.totalBytes,
       warn: progress.warn,
       activePartIndex: progress.activePartIndex,
@@ -458,7 +495,32 @@ export class MediaRecorderController {
     return { meetingId: this.meetingId, recorder: this.recorder }
   }
 
+  private currentDurationMs(): number {
+    const now = this.dependencies.now()
+    const currentPauseMs = this.pausedAt === null ? 0 : now - this.pausedAt
+    return Math.max(
+      0,
+      Math.round(now - this.startedAt - this.pausedDurationMs - currentPauseMs),
+    )
+  }
+
+  private startElapsedTimer(): void {
+    this.stopElapsedTimer()
+    this.elapsedTimer = setInterval(() => {
+      if (this.state === 'recording' || this.state === 'rolling') {
+        this.publish({ durationMs: this.currentDurationMs() })
+      }
+    }, ELAPSED_UPDATE_INTERVAL_MS)
+  }
+
+  private stopElapsedTimer(): void {
+    if (this.elapsedTimer === null) return
+    clearInterval(this.elapsedTimer)
+    this.elapsedTimer = null
+  }
+
   private cleanupCapture(): void {
+    this.stopElapsedTimer()
     this.recorder?.removeEventListener('dataavailable', this.onDataAvailable)
     for (const track of this.stream?.getTracks() ?? []) track.stop()
     this.stream = null

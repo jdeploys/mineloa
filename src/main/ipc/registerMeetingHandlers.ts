@@ -5,6 +5,8 @@ import {
   CreateRecordingMeetingInputSchema,
   MeetingDocumentSchema,
   MeetingIdSchema,
+  MeetingSearchInputSchema,
+  MeetingTitleSchema,
   PublicMeetingSchema,
   type MeetingDocument,
   type PublicMeeting,
@@ -19,8 +21,8 @@ interface MeetingIpcMain {
 }
 
 type MeetingRepositoryPort = Pick<MeetingRepository,
-  'listRecent' | 'create' | 'requireById' | 'listSpeakers' | 'listTranscript' |
-  'listSummarySections' | 'listActionItems' | 'renameSpeaker'> & Partial<Pick<MeetingRepository, 'listRecordingParts'>>
+  'listRecent' | 'searchRecent' | 'create' | 'requireById' | 'listSpeakers' | 'listTranscript' |
+  'listSummarySections' | 'listActionItems' | 'renameMeeting' | 'renameSpeaker'> & Partial<Pick<MeetingRepository, 'listRecordingParts'>>
 type TemplateServicePort = Pick<TemplateService, 'get'>
 
 const SpeakerIdSchema = z.string().trim().min(1).max(200)
@@ -57,6 +59,9 @@ function getDocument(repository: MeetingRepositoryPort, templates: TemplateServi
 
 export function registerMeetingHandlers(ipcMain: MeetingIpcMain, repository: MeetingRepositoryPort, templates: TemplateServicePort): void {
   ipcMain.handle('meetings:list', () => repository.listRecent().map(toPublicMeeting))
+  ipcMain.handle('meetings:search', async (_event, rawInput) =>
+    repository.searchRecent(MeetingSearchInputSchema.parse(rawInput)).map(toPublicMeeting),
+  )
   ipcMain.handle('meetings:get', async (_event, rawId) => getDocument(repository, templates, MeetingIdSchema.parse(rawId)))
   ipcMain.handle('meetings:create-recording', async (_event, rawInput) => {
     const input = CreateRecordingMeetingInputSchema.parse(rawInput)
@@ -67,6 +72,12 @@ export function registerMeetingHandlers(ipcMain: MeetingIpcMain, repository: Mee
       audioPath: null, audioByteCount: 0, selectedTemplateId: input.selectedTemplateId,
     }))
   })
+  ipcMain.handle('meetings:rename', async (_event, rawMeetingId, rawTitle) =>
+    toPublicMeeting(repository.renameMeeting(
+      MeetingIdSchema.parse(rawMeetingId),
+      MeetingTitleSchema.parse(rawTitle),
+    )),
+  )
   ipcMain.handle('meetings:rename-speaker', async (_event, rawMeetingId, rawSpeakerId, rawDisplayName) =>
     repository.renameSpeaker(
       MeetingIdSchema.parse(rawMeetingId),

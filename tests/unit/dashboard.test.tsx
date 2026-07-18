@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MeetingStatus } from '../../src/shared/contracts/meeting'
@@ -37,15 +37,16 @@ describe('balanced meeting dashboard', () => {
 
   it('shows the recording entry and exact recent meeting statuses', () => {
     render(<Dashboard
-      meetings={[meeting('done', '제품 회의', 'completed'), meeting('failed', '주간 회의', 'failed')]}
+      meetings={[meeting('done', '제품 회의', 'completed'), meeting('recorded', '고객 회의', 'recorded'), meeting('failed', '주간 회의', 'failed')]}
       recordingControls={{ start: vi.fn(), stop: vi.fn(), discard: vi.fn() }}
       onOpenMeeting={vi.fn()}
       onNavigate={vi.fn()}
     />)
 
     expect(screen.getByRole('button', { name: '녹음 시작' })).toHaveAttribute('data-variant', 'primary')
-    expect(screen.getByText('completed')).toBeInTheDocument()
-    expect(screen.getByText('failed')).toBeInTheDocument()
+    expect(screen.getByLabelText('회의록 생성 완료')).toHaveAttribute('data-icon-only', 'true')
+    expect(screen.getByText('녹음 완료')).toBeInTheDocument()
+    expect(screen.getByText('회의록 생성 실패')).toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: '주요 메뉴' })).not.toBeInTheDocument()
   })
 
@@ -71,8 +72,8 @@ describe('balanced meeting dashboard', () => {
 
   it.each([
     ['idle dashboard', [], '최근 기록이 없습니다.'],
-    ['failed processing', [meeting('failed', '실패한 회의', 'failed')], 'failed'],
-    ['recoverable recording', [meeting('recover', '복구할 회의', 'recoverable')], 'recoverable'],
+    ['failed processing', [meeting('failed', '실패한 회의', 'failed')], '회의록 생성 실패'],
+    ['recoverable recording', [meeting('recover', '복구할 회의', 'recoverable')], '녹음 복구 필요'],
   ])('renders the visible %s state', (_name, meetings, visible) => {
     render(<Dashboard
       meetings={meetings as PublicMeeting[]}
@@ -90,5 +91,55 @@ describe('balanced meeting dashboard', () => {
     expect(screen.getByText('녹음 중')).toBeVisible()
     expect(screen.getByRole('button', { name: '종료' })).toBeVisible()
     expect(screen.getByRole('button', { name: '폐기' })).toBeVisible()
+  })
+
+  it('searches title and content by keyword and inclusive date range, then resets', async () => {
+    const user = userEvent.setup()
+    const original = meeting('original', '기존 회의', 'recorded')
+    const matched = meeting('matched', '고객 인터뷰', 'completed')
+    const onSearch = vi.fn(async () => [matched])
+    render(<Dashboard
+      meetings={[original]}
+      recordingControls={{ start: vi.fn(), stop: vi.fn(), discard: vi.fn() }}
+      onOpenMeeting={vi.fn()}
+      onNavigate={vi.fn()}
+      onSearch={onSearch}
+    />)
+
+    await user.type(screen.getByRole('searchbox', { name: '키워드' }), '  예산  ')
+    await user.type(screen.getByLabelText('시작일'), '2026-07-01')
+    await user.type(screen.getByLabelText('종료일'), '2026-07-18')
+    await user.click(screen.getByRole('button', { name: '검색' }))
+
+    expect(onSearch).toHaveBeenCalledWith({
+      query: '예산',
+      from: new Date('2026-07-01T00:00:00').toISOString(),
+      toExclusive: new Date('2026-07-19T00:00:00').toISOString(),
+    })
+    expect(await screen.findByText('고객 인터뷰')).toBeVisible()
+    expect(screen.queryByText('기존 회의')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '초기화' }))
+    expect(screen.getByText('기존 회의')).toBeVisible()
+  })
+
+  it('applies a changed date immediately without the search button', async () => {
+    const onSearch = vi.fn(async () => [meeting('dated', '해당 날짜 회의', 'completed')])
+    render(<Dashboard
+      meetings={[meeting('original', '기존 회의', 'recorded')]}
+      recordingControls={{ start: vi.fn(), stop: vi.fn(), discard: vi.fn() }}
+      onOpenMeeting={vi.fn()}
+      onNavigate={vi.fn()}
+      onSearch={onSearch}
+    />)
+
+    fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-07-18' } })
+
+    await waitFor(() => expect(onSearch).toHaveBeenCalledWith({
+      query: '',
+      from: new Date('2026-07-18T00:00:00').toISOString(),
+      toExclusive: null,
+    }))
+    expect(await screen.findByText('해당 날짜 회의')).toBeVisible()
   })
 })

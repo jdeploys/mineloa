@@ -8,8 +8,11 @@ import {
   CreateRecordingMeetingInputSchema,
   MeetingDocumentSchema,
   MeetingIdSchema,
+  MeetingSearchInputSchema,
+  MeetingTitleSchema,
   PublicMeetingSchema,
   type CreateRecordingMeetingInput,
+  type MeetingSearchInput,
 } from '../shared/contracts/meetingsApi'
 import { SpeakerSchema } from '../shared/contracts/meeting'
 import { ArchiveOperationResultSchema } from '../shared/contracts/archive'
@@ -101,10 +104,16 @@ const processing: DesktopApi['processing'] = Object.freeze({
 
 const meetings: DesktopApi['meetings'] = Object.freeze({
   list: () => ipcRenderer.invoke('meetings:list').then((value) => PublicMeetingSchema.array().parse(value)),
+  search: (input: MeetingSearchInput) => ipcRenderer.invoke(
+    'meetings:search', MeetingSearchInputSchema.parse(input),
+  ).then((value) => PublicMeetingSchema.array().parse(value)),
   get: (meetingId: string) => ipcRenderer.invoke('meetings:get', MeetingIdSchema.parse(meetingId)).then((value) => MeetingDocumentSchema.parse(value)),
   createRecording: (input: CreateRecordingMeetingInput) => ipcRenderer.invoke(
     'meetings:create-recording',
     CreateRecordingMeetingInputSchema.parse(input),
+  ).then((value) => PublicMeetingSchema.parse(value)),
+  renameMeeting: (meetingId: string, title: string) => ipcRenderer.invoke(
+    'meetings:rename', MeetingIdSchema.parse(meetingId), MeetingTitleSchema.parse(title),
   ).then((value) => PublicMeetingSchema.parse(value)),
   renameSpeaker: (meetingId: string, speakerId: string, displayName: string) => ipcRenderer.invoke(
     'meetings:rename-speaker', meetingId, speakerId, displayName,

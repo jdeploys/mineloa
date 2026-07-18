@@ -74,6 +74,7 @@ textarea {
   gap: 8px;
   min-height: 48px;
   border-radius: var(--radius-control);
+  white-space: nowrap;
 }
 
 .ui-icon {

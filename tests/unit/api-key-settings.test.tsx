@@ -120,26 +120,35 @@ describe('API key settings', () => {
     expect(screen.getByText('설정되지 않음')).toBeInTheDocument()
     expect(screen.getByLabelText('OpenAI API 키')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'API 키 저장' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'API 키 삭제' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'API 키 삭제' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'API 키 저장' }).querySelector('.ui-icon')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'API 키 삭제' }).querySelector('.ui-icon')).toBeVisible()
   })
 
-  it('separates the credential card from the API key danger zone', async () => {
+  it('keeps save and delete actions inside one credential form', async () => {
+    const user = userEvent.setup()
     const settings: DesktopApi['settings'] = {
       ...processingSettingsApi(),
       saveApiKey: vi.fn().mockResolvedValue(undefined),
-      getApiKeyStatus: vi.fn().mockResolvedValue({ configured: true, lastValidatedAt: null }),
+      getApiKeyStatus: vi
+        .fn()
+        .mockResolvedValueOnce({ configured: true, lastValidatedAt: null })
+        .mockResolvedValueOnce({ configured: false, lastValidatedAt: null }),
       deleteApiKey: vi.fn().mockResolvedValue(undefined),
     }
 
     render(<ApiKeySettings settings={settings} />)
 
     const credential = await screen.findByRole('region', { name: 'OpenAI API 자격 증명' })
-    const danger = screen.getByRole('region', { name: '저장된 API 키 삭제' })
     expect(credential).toHaveClass('surface-card', 'credential-card')
-    expect(danger).toHaveClass('danger-zone')
-    expect(credential.compareDocumentPosition(danger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const form = credential.querySelector('form')
+    expect(form).toContainElement(screen.getByRole('button', { name: 'API 키 저장' }))
+    expect(form).toContainElement(screen.getByRole('button', { name: 'API 키 삭제' }))
+    expect(screen.queryByRole('region', { name: '저장된 API 키 삭제' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'API 키 삭제' }))
+    expect(settings.deleteApiKey).toHaveBeenCalledOnce()
+    expect(await screen.findByText('설정되지 않음')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'API 키 삭제' })).not.toBeInTheDocument()
   })
 
   it('saves a key and shows the configured status without rendering the secret', async () => {

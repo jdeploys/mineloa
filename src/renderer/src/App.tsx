@@ -22,7 +22,7 @@ import { TemplateEditor } from './features/templates/TemplateEditor'
 import { useThemePreference } from './hooks/useThemePreference'
 
 type Screen = 'all' | 'templates' | 'settings' | 'detail'
-type RecordingControllerPort = Pick<MediaRecorderController, 'start' | 'stop' | 'discard'> & Partial<Pick<MediaRecorderController, 'pause' | 'resume' | 'subscribe' | 'resumeRecovered'>>
+type RecordingControllerPort = Pick<MediaRecorderController, 'start' | 'stop' | 'discard'> & Partial<Pick<MediaRecorderController, 'pause' | 'resume' | 'subscribe' | 'resumeRecovered' | 'listMicrophones'>>
 
 export function App({
   desktopApi = window.desktopApi,
@@ -90,13 +90,16 @@ export function App({
   }, [screen])
 
   const recordingControls = useMemo(() => ({
-    start: async (options?: { selectedTemplateId: string; audioPolicy: AudioPolicy }) => {
+    start: async (options?: { selectedTemplateId: string; audioPolicy: AudioPolicy; microphoneDeviceId: string | null; farFieldMode: boolean }) => {
       const created = await desktopApi.meetings.createRecording({
         title: `새 회의 ${new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date())}`,
         audioPolicy: options?.audioPolicy ?? 'delete_after_processing', selectedTemplateId: options?.selectedTemplateId ?? 'default',
       })
       try {
-        await controller.start(created.id)
+        await controller.start(created.id, {
+          microphoneDeviceId: options?.microphoneDeviceId ?? null,
+          farFieldMode: options?.farFieldMode ?? true,
+        })
       } catch (startError) {
         if (startError instanceof RecordingTerminalError && startError.state === 'capture_failed') {
           await refreshMeetings()
@@ -118,6 +121,7 @@ export function App({
     pause: async () => { await controller.pause?.() },
     resume: async () => { await controller.resume?.() },
     subscribe: controller.subscribe === undefined ? undefined : controller.subscribe.bind(controller),
+    listMicrophones: controller.listMicrophones === undefined ? undefined : controller.listMicrophones.bind(controller),
   }), [controller, desktopApi, refreshMeetings])
 
   function navigate(destination: 'all' | 'templates' | 'settings', originFocusKey?: string) {
@@ -149,6 +153,15 @@ export function App({
     setDocument(nextDocument)
     setProcessingStatus(nextStatus)
     await refreshMeetings()
+  }
+
+  async function renameOpenMeeting(meetingId: string, title: string) {
+    const updated = await desktopApi.meetings.renameMeeting(meetingId, title)
+    setDocument((current) => current?.meeting.id === meetingId
+      ? { ...current, meeting: updated }
+      : current)
+    setMeetings((current) => current.map((meeting) => meeting.id === meetingId ? updated : meeting))
+    return updated
   }
 
   async function importMeeting() {
@@ -199,7 +212,14 @@ export function App({
 
   return <AppShell active={activeNavigation} onNavigate={navigate}>
     <div hidden={screen !== 'all'}>
-      <Dashboard meetings={meetings} recordingControls={recordingControls} templates={desktopApi.templates} onOpenMeeting={(id) => void openMeeting(id)} onNavigate={navigate} />
+      <Dashboard
+        meetings={meetings}
+        recordingControls={recordingControls}
+        templates={desktopApi.templates}
+        onSearch={(input) => desktopApi.meetings.search(input)}
+        onOpenMeeting={(id) => void openMeeting(id)}
+        onNavigate={navigate}
+      />
     </div>
     {screen === 'settings' && <main className="page-container settings-page">
       <PageHeader ref={routeHeading} eyebrow="SETTINGS" title="설정" description="Mineloa가 기록과 AI 처리를 사용하는 방식을 관리합니다." backLabel="전체 기록" onBack={backToAll} />
@@ -216,6 +236,7 @@ export function App({
       document={document}
       headingRef={routeHeading}
       onBack={backToAll}
+      onRenameMeeting={renameOpenMeeting}
       onRenameSpeaker={desktopApi.meetings.renameSpeaker}
       processing={desktopApi.processing}
       initialProcessingStatus={processingStatus ?? undefined}
