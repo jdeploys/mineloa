@@ -117,6 +117,7 @@ node scripts/verify-package.mjs dist/mac-*/Mineloa.app
 ## 관련 문서
 
 - [기능별 최신 스크린샷과 디자인 비교](docs/screenshots/README.md)
+- [GitHub Release 배포 가이드](docs/release/README.md)
 - [Mac App Store 등록 가이드](docs/mac-app-store-publishing.md)
 - [릴리스 인수 매트릭스](docs/release/acceptance-matrix.md)
 - [macOS 시각 기준선 관리](docs/release/macos-visual-baselines.md)
