@@ -45,7 +45,7 @@ test('launches the real built app securely and records fake microphone audio', a
     await primaryNavigation.getByRole('button', { name: '전체 기록', exact: true }).click()
     await expect(window.getByRole('heading', { name: '새 회의' })).toBeInViewport()
 
-    await window.getByRole('button', { name: '녹음 시작' }).click()
+    await window.getByRole('button', { name: '녹음 시작', exact: true }).click()
     await expect(window.getByLabel('회의 녹음').getByText('녹음 중')).toBeVisible()
     await window.waitForTimeout(500)
     await window.getByRole('button', { name: '종료', exact: true }).click()
@@ -56,6 +56,44 @@ test('launches the real built app securely and records fake microphone audio', a
     await expect(window.getByRole('button', { name: '회의록 만들기' })).toBeVisible()
     await expect(window.getByRole('button', { name: '회의 내보내기' })).toHaveCount(0)
     await expect(window.getByRole('button', { name: 'Markdown 내보내기' })).toHaveCount(0)
+  } finally {
+    await app.close()
+  }
+})
+
+test('reopens the main window from the Window menu after it is closed', async () => {
+  const app = await electron.launch({
+    executablePath: electronPath,
+    cwd: root,
+    args: [
+      `--user-data-dir=${test.info().outputPath('user-data')}`,
+      '.',
+    ],
+  })
+  try {
+    const originalWindow = await app.firstWindow()
+    await expect(originalWindow).toHaveTitle('Mineloa')
+
+    await app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.close()
+    })
+    await expect.poll(() => app.windows().length).toBe(0)
+
+    const menuResult = await app.evaluate(({ Menu }) => {
+      const menu = Menu.getApplicationMenu()
+      const windowMenu = menu?.items.find((item) => item.label === 'Window')
+      const mainWindowItem = windowMenu?.submenu?.items.find((item) => item.label === 'Mineloa')
+
+      if (!mainWindowItem) return { found: false, accelerator: null }
+      mainWindowItem.click()
+      return { found: true, accelerator: mainWindowItem.accelerator }
+    })
+
+    expect(menuResult).toEqual({ found: true, accelerator: 'CmdOrCtrl+0' })
+    await expect.poll(() => app.windows().length).toBe(1)
+    const [reopenedWindow] = app.windows()
+    await expect(reopenedWindow).toHaveTitle('Mineloa')
+    await expect(reopenedWindow.getByRole('heading', { name: '새 회의' })).toBeVisible()
   } finally {
     await app.close()
   }

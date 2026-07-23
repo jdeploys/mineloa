@@ -16,7 +16,8 @@ import { registerTemplateHandlers } from './ipc/registerTemplateHandlers'
 import { registerProcessingHandlers } from './ipc/registerProcessingHandlers'
 import { RecordingService } from './recording/recordingService'
 import { RecoveryService } from './recording/recoveryService'
-import { createMainWindow } from './window/createMainWindow'
+import { createMainWindow, reopenMainWindow } from './window/createMainWindow'
+import { installApplicationMenu } from './window/applicationMenu'
 import { TemplateService } from './templates/templateService'
 import { startSingleInstanceApp } from './app/singleInstance'
 import { registerMediaProtocol } from './media/registerMediaProtocol'
@@ -48,6 +49,7 @@ protocol.registerSchemesAsPrivileged([{
 }])
 
 const verificationRequest = parsePackageVerificationRequest(process.argv)
+const applicationName = 'Mineloa'
 
 if (verificationRequest !== null) {
   app.whenReady().then(() => runPackageRuntimeVerification(verificationRequest.resultPath))
@@ -140,9 +142,12 @@ if (verificationRequest !== null) {
         registerArchiveHandlers(ipcMain, dialog, meetings, templateRepository, database, recordingsDirectory)
         registerMediaProtocol(protocol, meetings, recordingsDirectory)
 
+        installApplicationMenu(applicationName, process.platform === 'darwin', () => {
+          reopenMainWindow()
+        })
         createMainWindow()
         app.on('activate', () => {
-          if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
+          reopenMainWindow()
         })
       },
     })

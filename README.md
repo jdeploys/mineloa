@@ -138,6 +138,7 @@ npm run release:mac
 
 ## 관련 문서
 
+- [지원 및 문의](SUPPORT.md)
 - [기능별 최신 스크린샷과 디자인 비교](docs/screenshots/README.md)
 - [GitHub Release 배포 가이드](docs/release/README.md)
 - [Mac App Store 등록 가이드](docs/mac-app-store-publishing.md)

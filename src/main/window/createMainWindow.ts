@@ -2,6 +2,8 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { BrowserWindow, type BrowserWindowConstructorOptions } from 'electron'
 
+type MainWindow = Pick<BrowserWindow, 'isMinimized' | 'restore' | 'show' | 'focus'>
+
 export function getWindowWebPreferences(
   preload: string,
 ): NonNullable<BrowserWindowConstructorOptions['webPreferences']> {
@@ -52,6 +54,19 @@ export function createMainWindow(): BrowserWindow {
   } else {
     void window.loadFile(rendererFile)
   }
+
+  return window
+}
+
+export function reopenMainWindow(
+  windows: readonly MainWindow[] = BrowserWindow.getAllWindows(),
+  createWindow: () => MainWindow = createMainWindow,
+): MainWindow {
+  const window = windows[0] ?? createWindow()
+
+  if (window.isMinimized()) window.restore()
+  window.show()
+  window.focus()
 
   return window
 }

@@ -14,7 +14,7 @@
 
 - 프로모션 텍스트: 회의 녹음부터 전사, 구조화된 요약과 실행 항목까지 한곳에서 관리하세요. 기록은 기본적으로 이 Mac에 저장됩니다.
 - 키워드: 회의,녹음,전사,요약,회의록,생산성,음성,Whisper,OpenAI
-- 지원 URL: https://github.com/jdeploys/Mineloa/issues
+- 지원 URL: https://github.com/jdeploys/Mineloa/blob/main/SUPPORT.md
 - 마케팅 URL: https://github.com/jdeploys/Mineloa
 
 ### 설명
@@ -54,3 +54,9 @@ Mineloa 계정 로그인은 필요하지 않습니다.
 7. App Store 샌드박스판에서는 외부 Codex CLI 연동을 사용할 수 없습니다.
 
 파일 가져오기와 내보내기는 사용자가 macOS 파일 선택 대화상자에서 명시적으로 고른 파일에만 접근합니다.
+
+2026년 7월 23일 심사 의견 반영:
+
+8. 중국 본토 App Store는 Pricing and Availability의 App Availability에서 배포 대상에서 제외했습니다. OpenAI 기능이 포함된 이 빌드는 중국 본토에서 제공되지 않습니다.
+9. 주 창을 닫은 뒤에도 macOS 메뉴 막대의 “Window → Mineloa” 또는 Command–0으로 주 창을 다시 열 수 있습니다. Dock에서 앱을 다시 활성화해도 주 창이 열립니다.
+10. Support URL을 사용자가 질문 및 지원 요청 방법, 필수 진단 정보, 자주 발생하는 문제와 개인정보 보호 주의사항을 확인할 수 있는 공개 지원 페이지로 변경했습니다.
