@@ -22,6 +22,25 @@ describe('Markdown export', () => {
     expect(markdown).not.toMatch(/0:B|sk-|C:\\|processing/i)
   })
 
+  it('resolves speaker ids embedded in summary prose, not just in transcript lines', () => {
+    // Summary text stores internal ids so renames stay correct. Exports used to
+    // emit them verbatim, putting a raw hash where a name belongs.
+    const speakerId = '2acd817c403bc39fae35aecbc10ee1cf55301248cf795a0a727131adba467b94:0:A'
+    const markdown = exportMarkdown({
+      meeting: { title: '주간 회의', createdAt: '2026-07-15T00:00:00.000Z', durationMs: 65_000 },
+      speakers: [{ id: speakerId, displayName: '난이' }],
+      transcript: [{ speakerId, startMs: 0, endMs: 1_000, text: '공유드리겠습니다' }],
+      summarySections: [
+        { templateSectionId: 'a', title: '핵심 요약', kind: 'paragraph', text: `[${speakerId}]가 원페이지를 수정 중`, items: [], orderIndex: 0 },
+        { templateSectionId: 'b', title: '결정사항', kind: 'bullet_list', text: '', items: [`[${speakerId}]가 서면 피드백을 받기로 함`], orderIndex: 1 },
+      ],
+      actionItems: [],
+    })
+    expect(markdown).toContain('[난이]가 원페이지를 수정 중')
+    expect(markdown).toContain('- [난이]가 서면 피드백을 받기로 함')
+    expect(markdown).not.toContain(speakerId)
+  })
+
   it('renders action records once at the action_items template position', () => {
     const template = createDefaultTemplate(new Date('2026-07-15T00:00:00.000Z'))
     const content = new Map([

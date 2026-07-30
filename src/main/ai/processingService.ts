@@ -2,6 +2,7 @@ import { lstat, realpath, rm } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, sep } from 'node:path'
 import type { MeetingRepository, ProcessingAttempt, ProcessingStage } from '../db/meetingRepository'
 import type { ProcessingStatus } from '../../shared/contracts/processing'
+import type { AudioPolicy } from '../../shared/contracts/meeting'
 import { PROCESS_OWNER_ID } from './processingOwner'
 
 interface TranscriptionPort { transcribeMeeting(meetingId: string, attempt?: { attemptId: string; ownerId: string }): Promise<unknown> }
@@ -104,6 +105,21 @@ export class ProcessingService {
         await this.applyRetention(meetingId)
       }
       return this.getStatus(meetingId)
+    })
+  }
+
+  // Retention is a decision the user can revisit while the audio still exists.
+  // Switching a meeting that already finished over to deletion has to act now,
+  // because its cleanup stage has already run and will not run again.
+  async setAudioPolicy(meetingId: string, audioPolicy: AudioPolicy): Promise<ProcessingStatus> {
+    return this.lock(meetingId, async () => {
+      const meeting = this.meetings.updateAudioPolicy(meetingId, audioPolicy)
+      if (meeting.status === 'completed' && audioPolicy === 'delete_after_processing') {
+        await this.applyRetention(meetingId)
+      }
+      const status = this.getStatus(meetingId)
+      this.emit(status)
+      return status
     })
   }
 

@@ -34,6 +34,31 @@ function validateProviderTiming(response: NormalizedTranscription): void {
   }
 }
 
+// Whisper-family decoders degenerate on silence and noise, emitting the same
+// hypothesis for chunk after chunk. Six identical sentences across five seconds
+// is the model looping, not the room, so fold a repeat back into the segment it
+// repeats and keep the span it covered.
+export function collapseRepeatedSegments(
+  segments: readonly TranscriptSegment[],
+): TranscriptSegment[] {
+  const collapsed: TranscriptSegment[] = []
+  for (const segment of segments) {
+    const previous = collapsed.at(-1)
+    const text = segment.text.trim()
+    if (
+      previous !== undefined &&
+      text.length > 0 &&
+      previous.speakerId === segment.speakerId &&
+      previous.text.trim() === text
+    ) {
+      previous.endMs = Math.max(previous.endMs, segment.endMs)
+      continue
+    }
+    collapsed.push({ ...segment })
+  }
+  return collapsed
+}
+
 export class TranscriptionService {
   constructor(
     private readonly meetings: MeetingRepository,
@@ -102,7 +127,11 @@ export class TranscriptionService {
         offsetSeconds += response.durationSeconds
       }
 
-      const result = this.meetings.completeTranscription(meetingId, [...speakers.values()], segments)
+      const result = this.meetings.completeTranscription(
+        meetingId,
+        [...speakers.values()],
+        collapseRepeatedSegments(segments),
+      )
       if (ownAttempt !== null) this.meetings.finishProcessingAttempt(ownAttempt.id, { succeeded: true })
       return result
     } catch (error) {

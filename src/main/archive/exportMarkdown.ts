@@ -11,6 +11,13 @@ function timestamp(ms: number): string {
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }
 
+// Summary prose carries internal speaker ids so a rename stays correct without
+// rewriting stored text. They have to be resolved on the way out, or the file
+// shows a raw hash where a name belongs.
+function withSpeakerNames(value: string, speakers: MarkdownMeetingDocument['speakers']): string {
+  return speakers.reduce((text, speaker) => text.split(speaker.id).join(speaker.displayName), value)
+}
+
 export function exportMarkdown(document: MarkdownMeetingDocument): string {
   const names = new Map(document.speakers.map((speaker) => [speaker.id, speaker.displayName]))
   const lines = [`# ${document.meeting.title}`, '', `- 일시: ${document.meeting.createdAt}`, `- 길이: ${timestamp(document.meeting.durationMs)}`, '']
@@ -23,8 +30,8 @@ export function exportMarkdown(document: MarkdownMeetingDocument): string {
       }
       if (document.actionItems.length) lines.push('')
     } else {
-      if (section.text) lines.push(section.text, '')
-      for (const item of section.items) lines.push(`- ${item}`)
+      if (section.text) lines.push(withSpeakerNames(section.text, document.speakers), '')
+      for (const item of section.items) lines.push(`- ${withSpeakerNames(item, document.speakers)}`)
       if (section.items.length) lines.push('')
     }
   }

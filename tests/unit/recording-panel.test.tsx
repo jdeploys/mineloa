@@ -237,7 +237,9 @@ describe('RecordingPanel', () => {
 
     expect(controls.start).toHaveBeenCalledWith({
       selectedTemplateId: 'default',
-      audioPolicy: 'delete_after_processing',
+      // With nothing stored yet the fallback has to be the side that keeps the
+      // recording; a first run used to delete audio the user never chose to lose.
+      audioPolicy: 'keep',
       microphoneDeviceId: null,
       farFieldMode: true,
     })

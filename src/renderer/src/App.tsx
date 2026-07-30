@@ -3,7 +3,7 @@ import type { DesktopApi } from '../../shared/contracts/desktopApi'
 import type { MeetingDocument, PublicMeeting } from '../../shared/contracts/meetingsApi'
 import type { RecoveryItem } from '../../shared/contracts/recovery'
 import type { ProcessingStatus as ProcessingStatusValue } from '../../shared/contracts/processing'
-import type { AudioPolicy } from '../../shared/contracts/meeting'
+import { DEFAULT_AUDIO_POLICY, type AudioPolicy } from '../../shared/contracts/meeting'
 import { AppShell } from './components/layout/AppShell'
 import { PageHeader } from './components/layout/PageHeader'
 import { Dashboard } from './features/meetings/Dashboard'
@@ -97,7 +97,7 @@ export function App({
     start: async (options?: { selectedTemplateId: string; audioPolicy: AudioPolicy; microphoneDeviceId: string | null; farFieldMode: boolean }) => {
       const created = await desktopApi.meetings.createRecording({
         title: `새 회의 ${new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date())}`,
-        audioPolicy: options?.audioPolicy ?? 'delete_after_processing', selectedTemplateId: options?.selectedTemplateId ?? 'default',
+        audioPolicy: options?.audioPolicy ?? DEFAULT_AUDIO_POLICY, selectedTemplateId: options?.selectedTemplateId ?? 'default',
       })
       try {
         await controller.start(created.id, {

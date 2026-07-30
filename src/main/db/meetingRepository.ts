@@ -4,6 +4,7 @@ import {
   MeetingSchema,
   SpeakerSchema,
   TranscriptSegmentSchema,
+  type AudioPolicy,
   type Meeting,
   type Speaker,
   type TranscriptSegment,
@@ -241,6 +242,21 @@ export class MeetingRepository {
        LIMIT ?`,
     ).all(...parameters, limit) as MeetingRow[]
     return rows.map(toMeeting)
+  }
+
+  // The policy used to be frozen at creation, so a recording could be deleted
+  // by a choice the user made before the meeting existed and could no longer
+  // reach. Retention stays changeable for as long as the audio is still there.
+  updateAudioPolicy(id: string, audioPolicy: AudioPolicy): Meeting {
+    return inTransaction(this.database, () => {
+      const meeting = this.requireById(id)
+      if (meeting.status === 'deleted') throw new Error('Deleted meetings cannot change audio policy')
+      if (meeting.audioPath === null) throw new Error('This meeting has no audio to retain')
+      this.database
+        .prepare('UPDATE meetings SET audio_policy = ?, updated_at = ? WHERE id = ?')
+        .run(audioPolicy, new Date().toISOString(), id)
+      return this.requireById(id)
+    })
   }
 
   renameMeeting(id: string, title: string): Meeting {

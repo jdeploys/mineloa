@@ -14,7 +14,7 @@ import {
   type CreateRecordingMeetingInput,
   type MeetingSearchInput,
 } from '../shared/contracts/meetingsApi'
-import { SpeakerSchema } from '../shared/contracts/meeting'
+import { AudioPolicySchema, SpeakerSchema, type AudioPolicy } from '../shared/contracts/meeting'
 import { ArchiveOperationResultSchema } from '../shared/contracts/archive'
 import {
   ProcessingProviderSettingsSchema,
@@ -92,6 +92,9 @@ const processing: DesktopApi['processing'] = Object.freeze({
   getStatus: (meetingId: string) => ipcRenderer.invoke('processing:get-status', meetingId),
   process: (meetingId: string) => ipcRenderer.invoke('processing:process', meetingId),
   retry: (meetingId: string) => ipcRenderer.invoke('processing:retry', meetingId),
+  setAudioPolicy: (meetingId: string, audioPolicy: AudioPolicy) => ipcRenderer.invoke(
+    'processing:set-audio-policy', MeetingIdSchema.parse(meetingId), AudioPolicySchema.parse(audioPolicy),
+  ).then((value) => ProcessingStatusSchema.parse(value)),
   onProgress: (listener: (status: ProcessingStatus) => void) => {
     const handler = (_event: unknown, value: unknown) => {
       const parsed = ProcessingStatusSchema.safeParse(value)

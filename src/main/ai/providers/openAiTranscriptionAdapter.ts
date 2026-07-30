@@ -41,6 +41,8 @@ export class OpenAiTranscriptionAdapter implements TranscriptionProvider {
         model: 'gpt-4o-transcribe-diarize',
         responseFormat: 'diarized_json',
         chunkingStrategy: 'auto',
+        // Matches the `-l ko` the local Whisper adapter already pins.
+        language: 'ko',
       })
       return {
         durationSeconds: response.durationSeconds,

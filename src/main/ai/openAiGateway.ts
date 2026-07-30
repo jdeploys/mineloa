@@ -12,6 +12,7 @@ export interface TranscriptionRequest {
   model: 'gpt-4o-transcribe-diarize'
   responseFormat: 'diarized_json'
   chunkingStrategy: 'auto'
+  language: 'ko'
 }
 
 export interface ProviderTranscriptSegment {
@@ -103,6 +104,9 @@ export class OpenAiGateway implements OpenAiGatewayPort {
         model: request.model,
         response_format: request.responseFormat,
         chunking_strategy: request.chunkingStrategy,
+        // Without a language hint the model detects one per chunk, and a
+        // misdetected chunk comes back translated into English mid-meeting.
+        language: request.language,
       }, {
         timeout: transcriptionTimeoutMs(request.recordingDurationSeconds),
         // A retry re-uploads the whole recording and then waits out the same

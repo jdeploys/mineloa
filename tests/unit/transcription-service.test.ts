@@ -9,7 +9,7 @@ import { MeetingRepository } from '../../src/main/db/meetingRepository'
 import type { CredentialStore } from '../../src/main/credentials/credentialStore'
 import { OpenAiGateway, type OpenAiTranscriptionClient } from '../../src/main/ai/openAiGateway'
 import { OpenAiError, toOpenAiError } from '../../src/main/ai/openAiErrors'
-import { TranscriptionService } from '../../src/main/ai/transcriptionService'
+import { collapseRepeatedSegments, TranscriptionService } from '../../src/main/ai/transcriptionService'
 import { OpenAiTranscriptionAdapter } from '../../src/main/ai/providers/openAiTranscriptionAdapter'
 import { LocalWhisperTranscriptionAdapter } from '../../src/main/ai/providers/localWhisperTranscriptionAdapter'
 import { ProviderRegistry } from '../../src/main/ai/providers/providerRegistry'
@@ -67,6 +67,8 @@ describe('OpenAiGateway', () => {
       model: 'gpt-4o-transcribe-diarize',
       responseFormat: 'diarized_json',
       chunkingStrategy: 'auto',
+      // The local Whisper adapter pins `-l ko`; the cloud path must match.
+      language: 'ko',
     })
   })
 
@@ -128,12 +130,14 @@ describe('OpenAiGateway', () => {
       model: 'gpt-4o-transcribe-diarize',
       responseFormat: 'diarized_json',
       chunkingStrategy: 'auto',
+      language: 'ko',
     })
     await gateway.transcribe({
       filePath: secondPath,
       model: 'gpt-4o-transcribe-diarize',
       responseFormat: 'diarized_json',
       chunkingStrategy: 'auto',
+      language: 'ko',
     })
 
     expect(credentials.get).toHaveBeenCalledTimes(2)
@@ -143,6 +147,9 @@ describe('OpenAiGateway', () => {
       model: 'gpt-4o-transcribe-diarize',
       response_format: 'diarized_json',
       chunking_strategy: 'auto',
+      // Omitting this let the model detect a language per chunk, which turned
+      // stretches of a Korean meeting into English mid-transcript.
+      language: 'ko',
     }, { timeout: 15 * 60 * 1_000, maxRetries: 0 })
     expect(create.mock.calls[0]?.[0]).not.toHaveProperty('responseFormat')
     expect(create.mock.calls[0]?.[0]).not.toHaveProperty('chunkingStrategy')
@@ -173,6 +180,7 @@ describe('OpenAiGateway', () => {
       model: 'gpt-4o-transcribe-diarize',
       responseFormat: 'diarized_json',
       chunkingStrategy: 'auto',
+      language: 'ko',
     })).rejects.toMatchObject({
       code: 'OPENAI_MALFORMED_RESPONSE',
       message: 'OpenAI returned an invalid transcription response.',
@@ -208,6 +216,7 @@ describe('OpenAiGateway', () => {
       model: 'gpt-4o-transcribe-diarize',
       responseFormat: 'diarized_json',
       chunkingStrategy: 'auto',
+      language: 'ko',
     })).resolves.toEqual({
       durationSeconds: 31.792,
       segments: [{ speaker: 'A', startSeconds: 0, endSeconds: 1, text: 'Hello' }],
@@ -239,6 +248,7 @@ describe('OpenAiGateway', () => {
       model: 'gpt-4o-transcribe-diarize',
       responseFormat: 'diarized_json',
       chunkingStrategy: 'auto',
+      language: 'ko',
     }).catch((error: unknown) => error)
 
     expect(failure).toMatchObject({
@@ -268,6 +278,7 @@ describe('OpenAiGateway', () => {
       model: 'gpt-4o-transcribe-diarize',
       responseFormat: 'diarized_json',
       chunkingStrategy: 'auto',
+      language: 'ko',
     })).rejects.toMatchObject({
       code: 'OPENAI_INVALID_AUDIO',
       message: 'OpenAI could not process this audio file.',
@@ -570,5 +581,48 @@ describe('TranscriptionService', () => {
       { startMs: 4_000, endMs: 5_000 },
     ])
     h.database.close()
+  })
+})
+
+describe('collapseRepeatedSegments', () => {
+  function segment(id: string, speakerId: string | null, startMs: number, endMs: number, text: string) {
+    return { id, meetingId: 'm1', speakerId, startMs, endMs, text }
+  }
+
+  it('folds a looped hypothesis into one segment covering the whole span', () => {
+    // Observed artifact: the same sentence emitted six times across five seconds.
+    const looped = 'So if we see that somebody goes to the history show or whatever.'
+    const collapsed = collapseRepeatedSegments([
+      segment('1', 'A', 926_000, 927_000, looped),
+      segment('2', 'A', 927_000, 928_000, looped),
+      segment('3', 'A', 928_000, 931_000, looped),
+    ])
+    expect(collapsed).toHaveLength(1)
+    expect(collapsed[0]).toMatchObject({ id: '1', startMs: 926_000, endMs: 931_000, text: looped })
+  })
+
+  it('keeps repeats that belong to different speakers', () => {
+    const collapsed = collapseRepeatedSegments([
+      segment('1', 'A', 0, 1_000, '네'),
+      segment('2', 'B', 1_000, 2_000, '네'),
+    ])
+    expect(collapsed).toHaveLength(2)
+  })
+
+  it('keeps distinct text and does not reach across an intervening segment', () => {
+    const collapsed = collapseRepeatedSegments([
+      segment('1', 'A', 0, 1_000, '네'),
+      segment('2', 'A', 1_000, 2_000, '알겠습니다'),
+      segment('3', 'A', 2_000, 3_000, '네'),
+    ])
+    expect(collapsed.map((entry) => entry.text)).toEqual(['네', '알겠습니다', '네'])
+  })
+
+  it('leaves blank segments alone rather than merging them together', () => {
+    const collapsed = collapseRepeatedSegments([
+      segment('1', 'A', 0, 1_000, '  '),
+      segment('2', 'A', 1_000, 2_000, '  '),
+    ])
+    expect(collapsed).toHaveLength(2)
   })
 })

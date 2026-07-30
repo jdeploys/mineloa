@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { AudioPolicy } from './meeting'
 
 export const ProcessingStageSchema = z.enum(['transcribing', 'summarizing', 'cleanup'])
 export type ProcessingStage = z.infer<typeof ProcessingStageSchema>
@@ -22,5 +23,6 @@ export interface ProcessingApi {
   getStatus(meetingId: string): Promise<ProcessingStatus>
   process(meetingId: string): Promise<ProcessingStatus>
   retry(meetingId: string): Promise<ProcessingStatus>
+  setAudioPolicy(meetingId: string, audioPolicy: AudioPolicy): Promise<ProcessingStatus>
   onProgress(listener: (status: ProcessingStatus) => void): () => void
 }

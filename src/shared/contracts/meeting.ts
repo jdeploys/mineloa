@@ -26,6 +26,11 @@ export const MeetingStatusSchema = z.enum([
 export const AudioPolicySchema = z.enum(['keep', 'delete_after_processing'])
 export type AudioPolicy = z.infer<typeof AudioPolicySchema>
 
+// A deleted recording cannot be recovered, and the policy is fixed when the
+// meeting is created, so an absent or unreadable choice has to fall back to the
+// side that loses nothing. Every default in the app reads from here.
+export const DEFAULT_AUDIO_POLICY: AudioPolicy = 'keep'
+
 export const MeetingSchema = z.object({
   id: z.string().min(1),
   title: z.string(),

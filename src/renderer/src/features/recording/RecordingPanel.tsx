@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AudioPolicy } from '../../../../shared/contracts/meeting'
+import { DEFAULT_AUDIO_POLICY, type AudioPolicy } from '../../../../shared/contracts/meeting'
 import type { SummaryTemplate, TemplatesApi } from '../../../../shared/contracts/template'
 import { InlineNotice } from '../../components/feedback/InlineNotice'
 import { ActionBar } from '../../components/layout/ActionBar'
@@ -48,9 +48,9 @@ function formatElapsed(durationMs: number): string {
 function loadAudioPolicy(): AudioPolicy {
   try {
     const stored = globalThis.localStorage?.getItem(audioPolicyStorageKey)
-    return stored === 'keep' || stored === 'delete_after_processing' ? stored : 'delete_after_processing'
+    return stored === 'keep' || stored === 'delete_after_processing' ? stored : DEFAULT_AUDIO_POLICY
   } catch {
-    return 'delete_after_processing'
+    return DEFAULT_AUDIO_POLICY
   }
 }
 

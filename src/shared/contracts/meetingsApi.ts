@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { AudioPolicySchema, MeetingStatusSchema, SpeakerSchema, TranscriptSegmentSchema } from './meeting'
+import { AudioPolicySchema, DEFAULT_AUDIO_POLICY, MeetingStatusSchema, SpeakerSchema, TranscriptSegmentSchema } from './meeting'
 import { StoredActionItemSchema, StoredSummarySectionSchema } from './summary'
 
 export const MeetingIdSchema = z.string().trim().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/, 'Meeting id must be opaque')
@@ -50,7 +50,7 @@ export type MeetingDocument = z.infer<typeof MeetingDocumentSchema>
 
 export const CreateRecordingMeetingInputSchema = z.object({
   title: z.string().trim().min(1).max(200),
-  audioPolicy: AudioPolicySchema.default('delete_after_processing'),
+  audioPolicy: AudioPolicySchema.default(DEFAULT_AUDIO_POLICY),
   selectedTemplateId: z.string().trim().min(1).max(200).nullable().default(null),
 }).strict()
 export type CreateRecordingMeetingInput = z.input<typeof CreateRecordingMeetingInputSchema>

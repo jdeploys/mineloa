@@ -1,7 +1,7 @@
 import { useEffect, useState, type Ref } from 'react'
 import type { ArchiveApi } from '../../../../shared/contracts/archive'
 import type { ProcessingApi, ProcessingStatus as ProcessingStatusValue } from '../../../../shared/contracts/processing'
-import type { Speaker } from '../../../../shared/contracts/meeting'
+import type { AudioPolicy, Speaker } from '../../../../shared/contracts/meeting'
 import type { DocumentSummarySection, MeetingDocument, PublicMeeting } from '../../../../shared/contracts/meetingsApi'
 import { InlineNotice } from '../../components/feedback/InlineNotice'
 import { ActionBar } from '../../components/layout/ActionBar'
@@ -95,6 +95,10 @@ export function MeetingDetail({ document, onBack, onRenameMeeting, onRenameSpeak
       document.speakers.some((speaker) => speaker.id === speakerId && speaker.displayName !== displayName),
     )))
   }, [document.speakers])
+  useEffect(() => {
+    setAudioPolicy(document.meeting.audioPolicy)
+    setRetentionError(null)
+  }, [document.meeting.id, document.meeting.audioPolicy])
   async function saveTitle() {
     setEditingTitle(false)
     const nextTitle = localTitle.trim()
@@ -136,12 +140,28 @@ export function MeetingDetail({ document, onBack, onRenameMeeting, onRenameSpeak
   }
   const names = new Map(speakers.map((speaker) => [speaker.id, speaker.displayName]))
   const [archiveMessage, setArchiveMessage] = useState<{ tone: 'success' | 'info' | 'error'; message: string } | null>(null)
+  const [audioPolicy, setAudioPolicy] = useState<AudioPolicy>(document.meeting.audioPolicy)
+  const [retentionError, setRetentionError] = useState<string | null>(null)
   const orderedSections = document.summarySections.slice().sort((a, b) => a.orderIndex - b.orderIndex)
   const hasDocumentContent = orderedSections.length > 0 || speakers.length > 0 || document.transcript.length > 0
   const audioParts = document.audioParts ?? (document.audioUrl === null ? [] : [{
     partIndex: 0, url: document.audioUrl, byteCount: document.meeting.audioByteCount,
     durationMs: document.meeting.durationMs,
   }])
+
+  async function changeAudioPolicy(next: AudioPolicy) {
+    if (processing === undefined) return
+    const previous = audioPolicy
+    setAudioPolicy(next)
+    setRetentionError(null)
+    try {
+      await processing.setAudioPolicy(document.meeting.id, next)
+      await onRefresh?.()
+    } catch {
+      setAudioPolicy(previous)
+      setRetentionError('원본 오디오 설정을 바꾸지 못했습니다.')
+    }
+  }
 
   async function exportDocument(kind: 'nnote' | 'markdown') {
     if (archive === undefined) return
@@ -188,6 +208,22 @@ export function MeetingDetail({ document, onBack, onRenameMeeting, onRenameSpeak
           return <div className="audio-part" key={part.partIndex}><span>오디오 파트 {part.partIndex + 1}</span><AudioPlayer label={label} src={part.url} durationMs={part.durationMs} /></div>
         })}
       </div>
+      {processing === undefined || audioParts.length === 0 ? null : (
+        <div className="audio-retention">
+          <label>원본 오디오 <span className="recording-select-control">
+            <select
+              aria-label="원본 오디오 보관"
+              value={audioPolicy}
+              onChange={(event) => void changeAudioPolicy(event.target.value as AudioPolicy)}
+            >
+              <option value="keep">계속 보관</option>
+              <option value="delete_after_processing">처리 후 삭제</option>
+            </select>
+            <Icon name="down" size={20} />
+          </span></label>
+          {retentionError === null ? null : <p role="alert">{retentionError}</p>}
+        </div>
+      )}
       {processing === undefined || initialProcessingStatus === undefined ? null : <ProcessingStatus meetingId={document.meeting.id} processing={processing} initialStatus={initialProcessingStatus} onStatusChange={(status) => { if (status.state === 'completed' || status.state === 'failed' || status.state === 'cleanup_failed') void onRefresh?.() }} />}
       {archive === undefined || !hasDocumentContent ? null : <ActionBar><Button icon="export" variant="tertiary" onClick={() => void exportDocument('nnote')}>회의 내보내기</Button><Button icon="download" variant="tertiary" onClick={() => void exportDocument('markdown')}>Markdown 내보내기</Button></ActionBar>}
       {archiveMessage === null ? null : <InlineNotice tone={archiveMessage.tone} title="내보내기 결과"><p role="status">{archiveMessage.message}</p></InlineNotice>}

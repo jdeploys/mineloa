@@ -57,6 +57,7 @@ function request(filePath: string, recordingDurationSeconds?: number): Transcrip
     model: 'gpt-4o-transcribe-diarize',
     responseFormat: 'diarized_json',
     chunkingStrategy: 'auto',
+    language: 'ko',
   }
 }
 
