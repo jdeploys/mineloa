@@ -1,5 +1,6 @@
 import { createReadStream } from 'node:fs'
 import OpenAI from 'openai'
+import { Agent } from 'undici'
 import { z } from 'zod'
 import type { CredentialStore } from '../credentials/credentialStore'
 import { safeOpenAiError, toOpenAiError, toSummaryOpenAiError } from './openAiErrors'
@@ -29,13 +30,47 @@ export interface OpenAiGatewayPort {
   transcribe(request: TranscriptionRequest): Promise<ProviderTranscription>
 }
 
+export interface OpenAiRequestOptions {
+  timeout: number
+  maxRetries: number
+}
+
 export interface OpenAiTranscriptionClient {
-  audio: { transcriptions: { create(input: unknown): Promise<unknown> } }
+  audio: { transcriptions: { create(input: unknown, options?: OpenAiRequestOptions): Promise<unknown> } }
 }
 
 export type OpenAiTranscriptionClientFactory = (apiKey: string) => OpenAiTranscriptionClient
 
-const createClient: OpenAiTranscriptionClientFactory = (apiKey) => new OpenAI({ apiKey })
+// Node's fetch stops waiting for response headers after five minutes, and that
+// socket-level ceiling sits underneath the SDK, so raising the SDK timeout on
+// its own still lost long transcriptions at exactly 300s. Drop both socket
+// deadlines and let each request's own budget be the only one that applies.
+export const OPENAI_SOCKET_TIMEOUTS = { headersTimeout: 0, bodyTimeout: 0 } as const
+
+const openAiDispatcher = new Agent(OPENAI_SOCKET_TIMEOUTS)
+
+const createClient: OpenAiTranscriptionClientFactory = (apiKey) => new OpenAI({
+  apiKey,
+  fetchOptions: { dispatcher: openAiDispatcher },
+})
+
+// The diarized endpoint is not streaming: nothing comes back until the whole
+// transcript is ready, so the request has to outlive the server-side work.
+// openai-node defaults to a ten minute timeout, which aborts mid-job on long
+// recordings, and its retries re-upload the audio only to hit the same wall.
+// Budget from the recording length instead, and let a timeout stay terminal.
+const TRANSCRIPTION_TIMEOUT_FLOOR_MS = 15 * 60 * 1_000
+const TRANSCRIPTION_TIMEOUT_CEILING_MS = 60 * 60 * 1_000
+const TRANSCRIPTION_TIMEOUT_PER_AUDIO_SECOND_MS = 2_000
+
+export function transcriptionTimeoutMs(recordingDurationSeconds: number | undefined): number {
+  if (recordingDurationSeconds === undefined || !Number.isFinite(recordingDurationSeconds)) {
+    return TRANSCRIPTION_TIMEOUT_FLOOR_MS
+  }
+  const scaled = recordingDurationSeconds * TRANSCRIPTION_TIMEOUT_PER_AUDIO_SECOND_MS
+  if (scaled <= TRANSCRIPTION_TIMEOUT_FLOOR_MS) return TRANSCRIPTION_TIMEOUT_FLOOR_MS
+  return Math.min(TRANSCRIPTION_TIMEOUT_CEILING_MS, scaled)
+}
 
 const responseSchema = z.object({
   duration: z.number().finite().nonnegative().optional(),
@@ -68,6 +103,11 @@ export class OpenAiGateway implements OpenAiGatewayPort {
         model: request.model,
         response_format: request.responseFormat,
         chunking_strategy: request.chunkingStrategy,
+      }, {
+        timeout: transcriptionTimeoutMs(request.recordingDurationSeconds),
+        // A retry re-uploads the whole recording and then waits out the same
+        // budget again, so a timeout here surfaces instead of tripling the wait.
+        maxRetries: 0,
       })
     } catch (error) {
       throw toOpenAiError(error)
@@ -118,7 +158,13 @@ export interface OpenAiResponsesClient {
 
 export type OpenAiResponsesClientFactory = (apiKey: string) => OpenAiResponsesClient
 
-const createResponsesClient: OpenAiResponsesClientFactory = (apiKey) => new OpenAI({ apiKey })
+// Summaries are short today, but they grow with the transcript and would hit
+// the same 300s socket ceiling as transcription. The SDK timeout still bounds
+// them; only the socket deadline is lifted.
+const createResponsesClient: OpenAiResponsesClientFactory = (apiKey) => new OpenAI({
+  apiKey,
+  fetchOptions: { dispatcher: openAiDispatcher },
+})
 
 const responsesResultSchema = z.object({
   status: z.string(),

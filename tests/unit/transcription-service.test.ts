@@ -143,7 +143,7 @@ describe('OpenAiGateway', () => {
       model: 'gpt-4o-transcribe-diarize',
       response_format: 'diarized_json',
       chunking_strategy: 'auto',
-    })
+    }, { timeout: 15 * 60 * 1_000, maxRetries: 0 })
     expect(create.mock.calls[0]?.[0]).not.toHaveProperty('responseFormat')
     expect(create.mock.calls[0]?.[0]).not.toHaveProperty('chunkingStrategy')
   })
@@ -212,7 +212,10 @@ describe('OpenAiGateway', () => {
       durationSeconds: 31.792,
       segments: [{ speaker: 'A', startSeconds: 0, endSeconds: 1, text: 'Hello' }],
     })
-    expect(create).toHaveBeenCalledWith(expect.not.objectContaining({ recordingDurationSeconds: expect.anything() }))
+    expect(create).toHaveBeenCalledWith(
+      expect.not.objectContaining({ recordingDurationSeconds: expect.anything() }),
+      expect.objectContaining({ maxRetries: 0 }),
+    )
   })
 
   it('never rethrows a raw SDK error message', async () => {
