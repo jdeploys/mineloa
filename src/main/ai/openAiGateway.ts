@@ -71,7 +71,11 @@ export function transcriptionTimeoutMs(recordingDurationSeconds: number | undefi
   }
   const scaled = recordingDurationSeconds * TRANSCRIPTION_TIMEOUT_PER_AUDIO_SECOND_MS
   if (scaled <= TRANSCRIPTION_TIMEOUT_FLOOR_MS) return TRANSCRIPTION_TIMEOUT_FLOOR_MS
-  return Math.min(TRANSCRIPTION_TIMEOUT_CEILING_MS, scaled)
+  // The SDK rejects a fractional timeout outright, and a duration in seconds
+  // that came from milliseconds rarely scales to a whole number: 850.978
+  // seconds of audio asks for 1701955.9999999995 ms. Round up so a part that
+  // is a fraction of a millisecond long cannot make the request unsendable.
+  return Math.ceil(Math.min(TRANSCRIPTION_TIMEOUT_CEILING_MS, scaled))
 }
 
 const responseSchema = z.object({

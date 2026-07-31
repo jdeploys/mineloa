@@ -85,6 +85,16 @@ describe('transcriptionTimeoutMs', () => {
   it('caps the budget at an hour', () => {
     expect(transcriptionTimeoutMs(99_999)).toBe(60 * 60 * 1_000)
   })
+
+  // The SDK refuses a fractional timeout, and a cut part's length comes back
+  // from milliseconds as 850.9779999999997 seconds. The request has to survive
+  // that, so every budget is a whole number of milliseconds.
+  it('never asks the SDK for a fractional timeout', () => {
+    for (const seconds of [850.9779999999997, 1_202.403, 1_800.0000001, 451.7]) {
+      expect(Number.isInteger(transcriptionTimeoutMs(seconds))).toBe(true)
+    }
+    expect(transcriptionTimeoutMs(850.9779999999997)).toBe(1_701_956)
+  })
 })
 
 describe('OPENAI_SOCKET_TIMEOUTS', () => {
