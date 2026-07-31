@@ -1,11 +1,28 @@
 import { lstat, realpath, rm } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, sep } from 'node:path'
 import type { MeetingRepository, ProcessingAttempt, ProcessingStage } from '../db/meetingRepository'
-import type { ProcessingStatus } from '../../shared/contracts/processing'
+import type { ProcessingProgress, ProcessingStatus } from '../../shared/contracts/processing'
 import type { AudioPolicy } from '../../shared/contracts/meeting'
 import { PROCESS_OWNER_ID } from './processingOwner'
 
-interface TranscriptionPort { transcribeMeeting(meetingId: string, attempt?: { attemptId: string; ownerId: string }): Promise<unknown> }
+interface TranscriptionProgressReport {
+  unitStartedAt: string
+  completedUnits: number
+  totalUnits: number
+  pendingAudioMs: number
+  msPerAudioMs: number | null
+}
+
+interface TranscriptionPort {
+  transcribeMeeting(
+    meetingId: string,
+    attempt?: {
+      attemptId: string
+      ownerId: string
+      onProgress?: (progress: TranscriptionProgressReport) => void
+    },
+  ): Promise<unknown>
+}
 interface SummaryPort { summarizeMeeting(meetingId: string): Promise<unknown> }
 interface FilePort { remove(path: string): Promise<void> }
 
@@ -42,6 +59,9 @@ function canRetry(error: { code: string; retryable: boolean }): boolean {
 export class ProcessingService {
   private readonly active = new Set<string>()
   private readonly listeners = new Set<Listener>()
+  // Progress belongs to the run, not to the database: it is meaningless once
+  // the stage ends and must not survive a restart as a stale countdown.
+  private readonly progress = new Map<string, ProcessingProgress>()
 
   constructor(
     private readonly meetings: MeetingRepository,
@@ -74,7 +94,12 @@ export class ProcessingService {
       return { meetingId, state: 'failed', failedStage: stage, retryable: canRetry(error), audioRequired: stage === 'transcribing', error: { code: error.code, message: error.message } }
     }
     if (meeting.status === 'transcribing' || meeting.status === 'summarizing') {
-      return { meetingId, state: meeting.status, failedStage: null, retryable: false, audioRequired: meeting.status === 'transcribing', error: null }
+      const progress = this.progress.get(meetingId)
+      return {
+        meetingId, state: meeting.status, failedStage: null, retryable: false,
+        audioRequired: meeting.status === 'transcribing', error: null,
+        ...(progress === undefined ? {} : { progress }),
+      }
     }
     if (meeting.status === 'completed') {
       return { meetingId, state: 'completed', failedStage: null, retryable: false, audioRequired: false, error: null }
@@ -86,7 +111,7 @@ export class ProcessingService {
     return this.lock(meetingId, async () => {
       const meeting = this.meetings.requireById(meetingId)
       if (meeting.status !== 'recorded') throw new Error('Only a recorded meeting can start processing')
-      await this.runStage(meetingId, 'transcribing', () => this.meetings.beginTranscription(meetingId), (attempt) => this.transcription.transcribeMeeting(meetingId, { attemptId: attempt.id, ownerId: this.ownerId }))
+      await this.runStage(meetingId, 'transcribing', () => this.meetings.beginTranscription(meetingId), (attempt) => this.transcribeReporting(meetingId, attempt))
       await this.runStage(meetingId, 'summarizing', undefined, () => this.summary.summarizeMeeting(meetingId))
       await this.applyRetention(meetingId)
       return this.getStatus(meetingId)
@@ -103,7 +128,7 @@ export class ProcessingService {
         await this.runStage(meetingId, 'summarizing', () => this.meetings.beginSummarization(meetingId), () => this.summary.summarizeMeeting(meetingId))
         await this.applyRetention(meetingId)
       } else {
-        await this.runStage(meetingId, 'transcribing', () => this.meetings.beginTranscription(meetingId), (attempt) => this.transcription.transcribeMeeting(meetingId, { attemptId: attempt.id, ownerId: this.ownerId }))
+        await this.runStage(meetingId, 'transcribing', () => this.meetings.beginTranscription(meetingId), (attempt) => this.transcribeReporting(meetingId, attempt))
         await this.runStage(meetingId, 'summarizing', undefined, () => this.summary.summarizeMeeting(meetingId))
         await this.applyRetention(meetingId)
       }
@@ -141,17 +166,43 @@ export class ProcessingService {
     const attempt = this.meetings.beginProcessingAttempt(meetingId, stage, this.ownerId)
     try {
       prepare?.()
+      // Summarizing is one request against the whole transcript, so it has a
+      // single unit and reports nothing mid-flight; seeding it here is what
+      // gives the stage an estimate at all.
+      if (stage === 'summarizing') {
+        this.progress.set(meetingId, {
+          startedAt: attempt.startedAt,
+          unitStartedAt: attempt.startedAt,
+          completedUnits: 0,
+          totalUnits: 1,
+          pendingAudioMs: this.meetings.requireById(meetingId).durationMs,
+          msPerAudioMs: null,
+        })
+      }
       this.emit(this.getStatus(meetingId))
       await request(attempt)
     } catch (error) {
       const failure = safeFailure(error)
       this.meetings.failProcessing(meetingId)
       this.meetings.finishProcessingAttempt(attempt.id, { succeeded: false, error: failure })
+      this.progress.delete(meetingId)
       this.emit(this.getStatus(meetingId))
       throw error
     }
     this.meetings.finishProcessingAttempt(attempt.id, { succeeded: true })
+    this.progress.delete(meetingId)
     this.emit(this.getStatus(meetingId))
+  }
+
+  private transcribeReporting(meetingId: string, attempt: ProcessingAttempt): Promise<unknown> {
+    return this.transcription.transcribeMeeting(meetingId, {
+      attemptId: attempt.id,
+      ownerId: this.ownerId,
+      onProgress: (report) => {
+        this.progress.set(meetingId, { startedAt: attempt.startedAt, ...report })
+        this.emit(this.getStatus(meetingId))
+      },
+    })
   }
 
   private async applyRetention(meetingId: string): Promise<void> {

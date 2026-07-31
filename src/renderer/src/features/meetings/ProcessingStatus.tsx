@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ProcessingApi, ProcessingStatus as Status } from '../../../../shared/contracts/processing'
+import { elapsedLabel, remainingEstimateMs, remainingLabel, unitLabel } from '../../../../shared/processingEstimate'
 import { InlineNotice } from '../../components/feedback/InlineNotice'
 import { Button } from '../../components/ui/Button'
 import { Icon } from '../../components/ui/Icon'
@@ -23,6 +24,18 @@ export function ProcessingStatus({ meetingId, processing, initialStatus, onStatu
   }, [meetingId, initialStatus])
 
   const active = pending || status.state === 'transcribing' || status.state === 'summarizing'
+  const progress = active ? status.progress : undefined
+  // The provider is silent for the whole request, so the countdown is the
+  // renderer's own clock against the estimate Main handed over.
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    if (progress === undefined) return
+    setNowMs(Date.now())
+    const timer = setInterval(() => setNowMs(Date.now()), 1_000)
+    return () => clearInterval(timer)
+  }, [progress])
+  const stage = status.state === 'summarizing' ? 'summarizing' : 'transcribing'
+  const piece = progress === undefined ? null : unitLabel(progress)
   const label = pending ? '회의록 생성 시작 중'
     : status.state === 'transcribing' ? meetingStatusLabel('transcribing')
     : status.state === 'summarizing' ? meetingStatusLabel('summarizing')
@@ -63,12 +76,21 @@ export function ProcessingStatus({ meetingId, processing, initialStatus, onStatu
   return <InlineNotice tone={tone} title="회의록 생성 상태">
     <div className="processing-panel">
       <div className="processing-copy">
-        <strong aria-label={status.state === 'completed' ? label : undefined}>{status.state === 'completed' ? <Icon name="success" /> : label}</strong>
+        <strong aria-label={status.state === 'completed' ? label : undefined}>{status.state === 'completed' ? <Icon name="success" /> : label}{piece && <span className="processing-piece">{piece}</span>}</strong>
         {pending ? <span>회의록 생성을 시작하고 있습니다.</span>
           : status.state === 'transcribing' ? <span>녹음된 음성을 읽을 수 있는 글로 바꾸고 있습니다.</span>
             : status.state === 'summarizing' ? <span>대화 내용으로 회의록을 작성하고 있습니다.</span>
               : status.state === 'recorded' ? <span>녹음이 끝났습니다. 회의록을 만들 수 있습니다.</span>
                 : status.state === 'completed' ? <span>음성 변환과 회의록 작성을 모두 마쳤습니다.</span> : null}
+        {progress && <span className="processing-estimate">
+          {`경과 ${elapsedLabel(nowMs - Date.parse(progress.startedAt))} · ${remainingLabel(remainingEstimateMs({
+            stage,
+            unitStartedAt: progress.unitStartedAt,
+            pendingAudioMs: progress.pendingAudioMs,
+            msPerAudioMs: progress.msPerAudioMs,
+            nowMs,
+          }))}`}
+        </span>}
         {status.error && <span>{processingErrorMessage(status.error.code, status.retryable)}</span>}
       </div>
       {active ? <span className="processing-active" role="status" aria-label="처리 중"><Icon name="processing" />처리 중</span>

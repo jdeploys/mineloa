@@ -10,6 +10,7 @@ import type { CredentialStore } from '../../src/main/credentials/credentialStore
 import { OpenAiGateway, type OpenAiTranscriptionClient } from '../../src/main/ai/openAiGateway'
 import { OpenAiError, toOpenAiError } from '../../src/main/ai/openAiErrors'
 import { collapseRepeatedSegments, TranscriptionService } from '../../src/main/ai/transcriptionService'
+import { PROCESS_OWNER_ID } from '../../src/main/ai/processingOwner'
 import { OpenAiTranscriptionAdapter } from '../../src/main/ai/providers/openAiTranscriptionAdapter'
 import { LocalWhisperTranscriptionAdapter } from '../../src/main/ai/providers/localWhisperTranscriptionAdapter'
 import { ProviderRegistry } from '../../src/main/ai/providers/providerRegistry'
@@ -527,6 +528,63 @@ describe('TranscriptionService', () => {
       { startMs: 1_202_403, endMs: 1_203_403 },
     ])
     expect(dispose).toHaveBeenCalledOnce()
+    h.database.close()
+  })
+
+  // Nothing comes back from the provider mid-request, so each piece going out
+  // is the only progress signal a waiting user can be given.
+  it('reports which piece is in flight and what the finished pieces measured', async () => {
+    const h = harness()
+    const first = completedPartPath(h.recordingsDirectory, 'meeting-1', 0)
+    writeFileSync(first, Buffer.from([1]))
+    h.meetings.replaceRecordingParts('meeting-1', [
+      { partIndex: 0, relativePath: basename(first), byteCount: 1, durationMs: 2_053_381 },
+    ])
+    const chunker = {
+      chunk: async () => ({
+        chunks: [
+          { filePath: 'cut-0', durationSeconds: 1_202.403 },
+          { filePath: 'cut-1', durationSeconds: 850.978 },
+        ],
+        dispose: async () => {},
+      }),
+    }
+    // Each request takes a tenth of its audio, so the second report must carry
+    // 0.1 rather than the caller's default guess.
+    let clock = Date.parse('2026-07-31T07:30:00.000Z')
+    const provider = {
+      maxAudioDurationSeconds: 1_200,
+      async transcribe(request: { recordingDurationSeconds?: number }) {
+        clock += request.recordingDurationSeconds! * 100
+        return { durationSeconds: request.recordingDurationSeconds!, segments: [] }
+      },
+    }
+    const reports: unknown[] = []
+
+    await new TranscriptionService(
+      h.meetings, () => provider, h.recordingsDirectory, undefined, chunker, () => clock,
+    ).transcribeMeeting('meeting-1', {
+      attemptId: h.meetings.beginProcessingAttempt('meeting-1', 'transcribing', PROCESS_OWNER_ID).id,
+      ownerId: PROCESS_OWNER_ID,
+      onProgress: (report) => reports.push(report),
+    })
+
+    expect(reports).toEqual([
+      {
+        unitStartedAt: '2026-07-31T07:30:00.000Z',
+        completedUnits: 0,
+        totalUnits: 2,
+        pendingAudioMs: 2_053_381,
+        msPerAudioMs: null,
+      },
+      {
+        unitStartedAt: '2026-07-31T07:32:00.240Z',
+        completedUnits: 1,
+        totalUnits: 2,
+        pendingAudioMs: 850_978,
+        msPerAudioMs: 0.1,
+      },
+    ])
     h.database.close()
   })
 

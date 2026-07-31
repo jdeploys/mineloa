@@ -15,6 +15,23 @@ export interface TranscriptionResult {
   segments: TranscriptSegment[]
 }
 
+/** Reported as each request goes out, so a waiting user sees where it is. */
+export interface TranscriptionProgress {
+  unitStartedAt: string
+  completedUnits: number
+  totalUnits: number
+  pendingAudioMs: number
+  msPerAudioMs: number | null
+}
+
+// A part is cut only when it is about to be sent, so the pieces of later parts
+// are not known yet. Their length predicts the count closely enough to label,
+// and the count is corrected the moment a part cuts differently.
+function plannedUnits(durationSeconds: number | undefined, maxDurationSeconds: number | undefined): number {
+  if (maxDurationSeconds === undefined || durationSeconds === undefined || !(durationSeconds > 0)) return 1
+  return Math.max(1, Math.ceil(durationSeconds / maxDurationSeconds))
+}
+
 function validateProviderTiming(response: NormalizedTranscription): void {
   if (!Number.isFinite(response.durationSeconds) || response.durationSeconds < 0) {
     throw safeProviderError('TRANSCRIPTION_MALFORMED_RESPONSE', 'The transcription provider returned an invalid response.', false)
@@ -69,11 +86,16 @@ export class TranscriptionService {
     private readonly recordingsDirectory: string,
     private readonly ownerId = PROCESS_OWNER_ID,
     private readonly chunker: AudioChunker = createWebmAudioChunker(tmpdir()),
+    private readonly now: () => number = Date.now,
   ) {}
 
   async transcribeMeeting(
     meetingId: string,
-    orchestration?: { attemptId: string; ownerId: string },
+    orchestration?: {
+      attemptId: string
+      ownerId: string
+      onProgress?: (progress: TranscriptionProgress) => void
+    },
   ): Promise<TranscriptionResult> {
     const ownAttempt = orchestration === undefined
       ? this.meetings.beginProcessingAttempt(meetingId, 'transcription', this.ownerId)
@@ -99,10 +121,32 @@ export class TranscriptionService {
       let offsetSeconds = 0
       const meetingPrefix = createHash('sha256').update(meetingId, 'utf8').digest('hex')
 
+      const maxUnitSeconds = provider.maxAudioDurationSeconds
+      const laterPartsAudioMs = parts.map((_part, index) => parts
+        .slice(index + 1)
+        .reduce((total, later) => total + (later.durationSeconds ?? 0) * 1_000, 0))
+      const laterPartsUnits = parts.map((_part, index) => parts
+        .slice(index + 1)
+        .reduce((total, later) => total + plannedUnits(later.durationSeconds, maxUnitSeconds), 0))
+      let completedUnits = 0
+      let measuredAudioMs = 0
+      let measuredElapsedMs = 0
+
       for (const [partIndex, part] of parts.entries()) {
-        const pieces = await this.fittingPieces(part, provider.maxAudioDurationSeconds)
+        const pieces = await this.fittingPieces(part, maxUnitSeconds)
         try {
+          const pendingInPart = pieces.chunks.map((_piece, index) => pieces.chunks
+            .slice(index)
+            .reduce((total, piece) => total + (piece.durationSeconds ?? 0) * 1_000, 0))
           for (const [pieceIndex, piece] of pieces.chunks.entries()) {
+            const unitStartedMs = this.now()
+            orchestration?.onProgress?.({
+              unitStartedAt: new Date(unitStartedMs).toISOString(),
+              completedUnits,
+              totalUnits: completedUnits + (pieces.chunks.length - pieceIndex) + laterPartsUnits[partIndex],
+              pendingAudioMs: pendingInPart[pieceIndex] + laterPartsAudioMs[partIndex],
+              msPerAudioMs: measuredAudioMs > 0 ? measuredElapsedMs / measuredAudioMs : null,
+            })
             // A provider names its speakers per request, so labels from two
             // requests are not the same people. Each piece keeps its own
             // namespace, exactly as separate recording parts already do.
@@ -136,6 +180,11 @@ export class TranscriptionService {
               })
             })
             offsetSeconds += response.durationSeconds
+            completedUnits += 1
+            if (piece.durationSeconds !== undefined && piece.durationSeconds > 0) {
+              measuredAudioMs += piece.durationSeconds * 1_000
+              measuredElapsedMs += this.now() - unitStartedMs
+            }
           }
         } finally {
           await pieces.dispose()
