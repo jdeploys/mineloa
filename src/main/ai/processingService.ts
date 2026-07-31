@@ -30,10 +30,13 @@ function canRetry(error: { code: string; retryable: boolean }): boolean {
   // Releases before the diarized-duration fallback persisted this code as
   // non-retryable. Local runtime failures could also be persisted as
   // non-retryable before development runtime auto-discovery was added.
+  // A recording longer than the transcription model accepts was rejected as an
+  // unreadable file before parts were cut to fit, and those parts are cut now.
   // Keep those saved recordings recoverable after upgrading.
   return error.retryable
     || error.code === 'OPENAI_MALFORMED_RESPONSE'
     || error.code === 'LOCAL_WHISPER_RUNTIME_UNAVAILABLE'
+    || error.code === 'OPENAI_INVALID_AUDIO'
 }
 
 export class ProcessingService {

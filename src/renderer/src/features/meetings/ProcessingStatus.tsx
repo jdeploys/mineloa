@@ -4,6 +4,7 @@ import { InlineNotice } from '../../components/feedback/InlineNotice'
 import { Button } from '../../components/ui/Button'
 import { Icon } from '../../components/ui/Icon'
 import { meetingStatusLabel } from './meetingStatusLabel'
+import { processingErrorMessage } from './processingErrorMessage'
 
 export function ProcessingStatus({ meetingId, processing, initialStatus, onStatusChange }: { meetingId: string; processing: ProcessingApi; initialStatus: Status; onStatusChange?(status: Status): void }) {
   const [status, setStatus] = useState(initialStatus)
@@ -68,7 +69,7 @@ export function ProcessingStatus({ meetingId, processing, initialStatus, onStatu
             : status.state === 'summarizing' ? <span>대화 내용으로 회의록을 작성하고 있습니다.</span>
               : status.state === 'recorded' ? <span>녹음이 끝났습니다. 회의록을 만들 수 있습니다.</span>
                 : status.state === 'completed' ? <span>음성 변환과 회의록 작성을 모두 마쳤습니다.</span> : null}
-        {status.error && <span>{status.retryable ? '일시적인 오류가 발생했습니다. 다시 시도해 주세요.' : '현재 설정으로 다시 처리할 수 없는 오류가 발생했습니다.'}</span>}
+        {status.error && <span>{processingErrorMessage(status.error.code, status.retryable)}</span>}
       </div>
       {active ? <span className="processing-active" role="status" aria-label="처리 중"><Icon name="processing" />처리 중</span>
         : status.state !== 'completed' && (status.failedStage === null || status.retryable) ? <Button icon={status.failedStage === null ? 'play' : 'retry'} variant="primary" onClick={() => void submit()}>{action}</Button>

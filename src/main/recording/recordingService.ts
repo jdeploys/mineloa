@@ -20,7 +20,7 @@ import {
   type SessionManifest,
 } from './sessionManifest'
 import {
-  evaluateRecordingSize,
+  evaluateRecordingPart,
   type AppendChunkInput,
   type RecordingProgress,
 } from './recordingTypes'
@@ -108,7 +108,6 @@ export class RecordingService {
 
     const totalBytes = manifest.totalBytes + input.bytes.byteLength
     const partBytes = part.byteCount + input.bytes.byteLength
-    const policy = evaluateRecordingSize(partBytes)
     const nextPart: RecordingPartManifest = {
       ...part,
       lastChunkIndex: input.chunkIndex,
@@ -309,17 +308,29 @@ export class RecordingService {
     return { partIndex, lastChunkIndex: -1, byteCount: 0, durationMs: 0, completed: false }
   }
 
+  // Manifest parts carry the meeting duration reached when the part closed, so
+  // a part's own length is the distance from where the previous one ended.
+  private partDurationMs(manifest: SessionManifest, partIndex: number, durationMs: number): number {
+    const previous = manifest.parts.filter((part) => part.partIndex < partIndex).at(-1)
+    return Math.max(0, durationMs - (previous?.durationMs ?? 0))
+  }
+
   private progress(manifest: SessionManifest, rolledToPartIndex: number | null): RecordingProgress {
     const activePart = manifest.parts.find(
       ({ partIndex }) => partIndex === manifest.activePartIndex,
     )
-    const activePartBytes = activePart?.byteCount ?? 0
+    const policy = evaluateRecordingPart(
+      activePart?.byteCount ?? 0,
+      activePart === undefined
+        ? 0
+        : this.partDurationMs(manifest, activePart.partIndex, activePart.durationMs),
+    )
     return {
       totalBytes: manifest.totalBytes,
       durationMs: manifest.durationMs,
       maxReached: manifest.durationMs >= MAX_RECORDING_DURATION_MS,
-      warn: evaluateRecordingSize(activePartBytes).warn,
-      rollRequired: evaluateRecordingSize(activePartBytes).rollPart,
+      warn: policy.warn,
+      rollRequired: policy.rollPart,
       rolledToPartIndex,
       activePartIndex: manifest.activePartIndex,
       nextChunkIndex: (activePart?.lastChunkIndex ?? -1) + 1,

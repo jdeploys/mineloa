@@ -42,6 +42,11 @@ export interface SummaryRequest {
 
 export interface TranscriptionProvider {
   readonly id: TranscriptionProviderId
+  /**
+   * Longest recording this provider accepts in one request. A part longer than
+   * this is cut before it is sent; leaving it unset means no ceiling applies.
+   */
+  readonly maxAudioDurationSeconds?: number
   descriptor(): Promise<ProviderDescriptor>
   availability(): Promise<ProviderAvailability>
   transcribe(request: TranscriptionProviderRequest): Promise<NormalizedTranscription>

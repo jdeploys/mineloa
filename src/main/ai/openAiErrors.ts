@@ -5,6 +5,7 @@ export type OpenAiErrorCode =
   | 'OPENAI_TIMEOUT'
   | 'OPENAI_NETWORK'
   | 'OPENAI_INVALID_AUDIO'
+  | 'OPENAI_AUDIO_TOO_LONG'
   | 'OPENAI_INVALID_SUMMARY_REQUEST'
   | 'OPENAI_MALFORMED_RESPONSE'
   | 'OPENAI_MALFORMED_SUMMARY'
@@ -46,6 +47,13 @@ const safeDetails: Record<OpenAiErrorCode, { message: string; retryable: boolean
   },
   OPENAI_INVALID_AUDIO: {
     message: 'OpenAI could not process this audio file.',
+    retryable: false,
+  },
+  // Parts are cut to fit before they are sent, so reaching the model ceiling
+  // means the audio could not be cut small enough and a retry sends the same
+  // rejected request again.
+  OPENAI_AUDIO_TOO_LONG: {
+    message: 'This recording is longer than the transcription model accepts in one request.',
     retryable: false,
   },
   OPENAI_INVALID_SUMMARY_REQUEST: {
@@ -104,6 +112,13 @@ export function toOpenAiError(error: unknown): OpenAiError {
     code = 'OPENAI_RATE_LIMITED'
   } else if (name.includes('timeout') || lower.includes('timed out') || lower.includes('timeout')) {
     code = 'OPENAI_TIMEOUT'
+  } else if (
+    // "audio duration 2053.4 seconds is longer than 1400 seconds which is the
+    // maximum for this model" arrives as a plain 400 that reads like any other
+    // bad file, which is why an over-long meeting looked corrupt.
+    /longer than [\d.]+ seconds/.test(lower) || lower.includes('maximum for this model')
+  ) {
+    code = 'OPENAI_AUDIO_TOO_LONG'
   } else if (
     status === 400 ||
     status === 413 ||

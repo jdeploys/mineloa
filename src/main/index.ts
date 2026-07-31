@@ -5,6 +5,8 @@ import { OpenAiGateway, OpenAiSummaryGateway } from './ai/openAiGateway'
 import { TranscriptionService } from './ai/transcriptionService'
 import { SummaryService } from './ai/summaryService'
 import { ProcessingService } from './ai/processingService'
+import { PROCESS_OWNER_ID } from './ai/processingOwner'
+import { createWebmAudioChunker } from './ai/audioChunker'
 import { KeyringCredentialStore } from './credentials/keyringCredentialStore'
 import { openDatabase } from './db/database'
 import { MeetingRepository } from './db/meetingRepository'
@@ -129,6 +131,8 @@ if (verificationRequest !== null) {
             meetings,
             () => registry.transcription(processingSettings.get().transcriptionProvider),
             recordingsDirectory,
+            PROCESS_OWNER_ID,
+            createWebmAudioChunker(app.getPath('temp')),
           ),
           new SummaryService(
             meetings,

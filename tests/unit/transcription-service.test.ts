@@ -294,6 +294,14 @@ describe('toOpenAiError', () => {
     ['timeout', Object.assign(new Error('provider canary timeout'), { name: 'APIConnectionTimeoutError' }), 'OPENAI_TIMEOUT', 'The OpenAI request timed out. Try again.'],
     ['network', Object.assign(new Error('provider canary network'), { name: 'APIConnectionError' }), 'OPENAI_NETWORK', 'Could not reach OpenAI. Check the network connection and try again.'],
     ['invalid audio', Object.assign(new Error('provider canary audio'), { status: 400 }), 'OPENAI_INVALID_AUDIO', 'OpenAI could not process this audio file.'],
+    // The observed rejection for a 34 minute meeting, which used to be
+    // indistinguishable from a corrupt file.
+    [
+      'audio past the model ceiling',
+      Object.assign(new Error('provider canary 400 audio duration 2053.381 seconds is longer than 1400 seconds which is the maximum for this model'), { status: 400 }),
+      'OPENAI_AUDIO_TOO_LONG',
+      'This recording is longer than the transcription model accepts in one request.',
+    ],
     ['malformed', new OpenAiError('OPENAI_MALFORMED_RESPONSE', 'provider canary malformed', false), 'OPENAI_MALFORMED_RESPONSE', 'OpenAI returned an invalid transcription response.'],
     ['unknown', new Error('provider canary unknown'), 'OPENAI_UNKNOWN', 'OpenAI transcription failed.'],
   ])('maps %s to a fixed safe classification', (_label, input, code, message) => {
@@ -463,6 +471,106 @@ describe('TranscriptionService', () => {
     expect(first.segments[0]?.id).not.toBe(second.segments[0]?.id)
     expect(h.meetings.listTranscript('meeting-1')).toEqual(first.segments)
     expect(h.meetings.listTranscript('meeting-2')).toEqual(second.segments)
+    h.database.close()
+  })
+
+  // A 34 minute meeting recorded before parts were rolled on length arrives as
+  // one file the model refuses, so the service cuts it before sending.
+  it('cuts a part past the provider ceiling into requests it accepts and offsets them in order', async () => {
+    const h = harness()
+    const first = completedPartPath(h.recordingsDirectory, 'meeting-1', 0)
+    writeFileSync(first, Buffer.from([1]))
+    h.meetings.replaceRecordingParts('meeting-1', [
+      { partIndex: 0, relativePath: basename(first), byteCount: 1, durationMs: 2_053_381 },
+    ])
+    const dispose = vi.fn(async () => {})
+    const chunker = {
+      chunk: vi.fn(async ({ filePath }: { filePath: string }) => ({
+        chunks: [
+          { filePath: `${filePath}.cut-0`, durationSeconds: 1_202.403 },
+          { filePath: `${filePath}.cut-1`, durationSeconds: 850.978 },
+        ],
+        dispose,
+      })),
+    }
+    const requests: Array<{ filePath: string; recordingDurationSeconds?: number }> = []
+    const provider = {
+      maxAudioDurationSeconds: 1_200,
+      async transcribe(request: (typeof requests)[number]) {
+        requests.push(request)
+        return {
+          durationSeconds: request.recordingDurationSeconds!,
+          segments: [{ speakerLabel: 'A', startSeconds: 0, endSeconds: 1, text: `piece ${requests.length}` }],
+        }
+      },
+    }
+
+    const result = await new TranscriptionService(
+      h.meetings, () => provider, h.recordingsDirectory, undefined, chunker,
+    ).transcribeMeeting('meeting-1')
+    const meetingPrefix = createHash('sha256').update('meeting-1').digest('hex')
+
+    expect(chunker.chunk).toHaveBeenCalledWith({
+      filePath: await realpath(first), durationSeconds: 2_053.381, maxDurationSeconds: 1_200,
+    })
+    expect(requests).toEqual([
+      { filePath: `${await realpath(first)}.cut-0`, recordingDurationSeconds: 1_202.403 },
+      { filePath: `${await realpath(first)}.cut-1`, recordingDurationSeconds: 850.978 },
+    ])
+    // Two requests name their speakers independently, so the pieces cannot
+    // share one speaker the way one request's labels do.
+    expect(result.speakers.map(({ id }) => id)).toEqual([
+      `${meetingPrefix}:0.0:A`, `${meetingPrefix}:0.1:A`,
+    ])
+    expect(result.segments.map(({ startMs, endMs }) => ({ startMs, endMs }))).toEqual([
+      { startMs: 0, endMs: 1_000 },
+      { startMs: 1_202_403, endMs: 1_203_403 },
+    ])
+    expect(dispose).toHaveBeenCalledOnce()
+    h.database.close()
+  })
+
+  it('removes the cut pieces even when a request fails midway', async () => {
+    const h = harness()
+    const first = completedPartPath(h.recordingsDirectory, 'meeting-1', 0)
+    writeFileSync(first, Buffer.from([1]))
+    h.meetings.replaceRecordingParts('meeting-1', [
+      { partIndex: 0, relativePath: basename(first), byteCount: 1, durationMs: 2_053_381 },
+    ])
+    const dispose = vi.fn(async () => {})
+    const chunker = {
+      chunk: async () => ({ chunks: [{ filePath: 'cut-0', durationSeconds: 1 }], dispose }),
+    }
+    const provider = {
+      maxAudioDurationSeconds: 1_200,
+      async transcribe() { throw safeProviderError('OPENAI_RATE_LIMITED', 'OpenAI rate limit was reached. Try again later.', true) },
+    }
+
+    await expect(new TranscriptionService(
+      h.meetings, () => provider, h.recordingsDirectory, undefined, chunker,
+    ).transcribeMeeting('meeting-1')).rejects.toMatchObject({ code: 'OPENAI_RATE_LIMITED' })
+
+    expect(dispose).toHaveBeenCalledOnce()
+    h.database.close()
+  })
+
+  it('leaves a part alone when the provider declares no ceiling', async () => {
+    const h = harness()
+    const first = completedPartPath(h.recordingsDirectory, 'meeting-1', 0)
+    writeFileSync(first, Buffer.from([1]))
+    h.meetings.replaceRecordingParts('meeting-1', [
+      { partIndex: 0, relativePath: basename(first), byteCount: 1, durationMs: 7_200_000 },
+    ])
+    const chunk = vi.fn()
+    const provider = {
+      async transcribe() { return { durationSeconds: 7_200, segments: [] } },
+    }
+
+    await new TranscriptionService(
+      h.meetings, () => provider, h.recordingsDirectory, undefined, { chunk },
+    ).transcribeMeeting('meeting-1')
+
+    expect(chunk).not.toHaveBeenCalled()
     h.database.close()
   })
 

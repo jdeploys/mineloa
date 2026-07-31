@@ -62,6 +62,14 @@ describe('ProcessingStatus', () => {
     expect(screen.queryByText('unsafe provider detail')).not.toBeInTheDocument()
   })
 
+  it('names the cause when the failure has one the user can act on', () => {
+    render(<ProcessingStatus meetingId="m1" processing={{ getStatus: vi.fn(), process: vi.fn(), retry: vi.fn(), setAudioPolicy: vi.fn(), onProgress: vi.fn(() => () => {}) }} initialStatus={{ meetingId: 'm1', state: 'failed', failedStage: 'transcribing', retryable: false, audioRequired: true, error: { code: 'OPENAI_AUDIO_TOO_LONG', message: 'unsafe provider detail' } }} />)
+
+    expect(screen.getByText('녹음이 음성 변환 모델이 한 번에 받을 수 있는 길이를 넘었습니다.')).toBeInTheDocument()
+    expect(screen.queryByText('현재 설정으로 다시 처리할 수 없는 오류가 발생했습니다.')).not.toBeInTheDocument()
+    expect(screen.queryByText('unsafe provider detail')).not.toBeInTheDocument()
+  })
+
   it('resets state when reused for another meeting and chooses process rather than stale retry', async () => {
     const process = vi.fn().mockResolvedValue({ meetingId: 'm2', state: 'transcribing', failedStage: null, retryable: false, audioRequired: true, error: null })
     const retry = vi.fn()

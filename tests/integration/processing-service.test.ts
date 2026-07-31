@@ -140,6 +140,30 @@ describe('ProcessingService', () => {
     h.database.close()
   })
 
+  // A meeting past the model's length ceiling was rejected as an unreadable
+  // file and saved as final. Parts are cut to fit now, so it can run again.
+  it('retries a saved invalid-audio failure once over-long parts are cut before upload', async () => {
+    const h = harness()
+    const attempt = h.meetings.beginProcessingAttempt('meeting-1', 'transcribing', PROCESS_OWNER_ID)
+    h.meetings.beginTranscription('meeting-1')
+    h.meetings.failProcessing('meeting-1')
+    h.meetings.finishProcessingAttempt(attempt.id, {
+      succeeded: false,
+      error: {
+        code: 'OPENAI_INVALID_AUDIO',
+        message: 'OpenAI could not process this audio file.',
+        retryable: false,
+      },
+    })
+
+    expect(h.service.getStatus('meeting-1')).toMatchObject({
+      state: 'failed', failedStage: 'transcribing', retryable: true, audioRequired: true,
+    })
+    await h.service.retry('meeting-1')
+    expect(h.transcribe).toHaveBeenCalledOnce()
+    h.database.close()
+  })
+
   it('retries saved local runtime failures after the runtime becomes available', async () => {
     const h = harness()
     const attempt = h.meetings.beginProcessingAttempt('meeting-1', 'transcribing', PROCESS_OWNER_ID)

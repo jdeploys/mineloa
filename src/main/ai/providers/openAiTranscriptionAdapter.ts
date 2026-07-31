@@ -11,8 +11,15 @@ import type {
 
 const available: ProviderAvailability = { available: true, code: null, message: null }
 
+// gpt-4o-transcribe-diarize refuses any upload past 1400 seconds with a 400,
+// and `chunking_strategy: 'auto'` only chunks server side once the file is
+// already accepted. Stop well short so the last cluster of a cut part, which
+// can overshoot the target by one cluster, still lands under the ceiling.
+const MAX_AUDIO_DURATION_SECONDS = 20 * 60
+
 export class OpenAiTranscriptionAdapter implements TranscriptionProvider {
   readonly id = 'openai' as const
+  readonly maxAudioDurationSeconds = MAX_AUDIO_DURATION_SECONDS
 
   constructor(private readonly gateway: OpenAiGatewayPort) {}
 

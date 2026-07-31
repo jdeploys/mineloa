@@ -1,10 +1,13 @@
 import { createHash } from 'node:crypto'
 import { lstat, realpath } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { basename, isAbsolute, join, relative, sep } from 'node:path'
 import type { Speaker, TranscriptSegment } from '../../shared/contracts/meeting'
 import type { MeetingRepository } from '../db/meetingRepository'
 import type { NormalizedTranscription, TranscriptionProvider } from './providers/providerPorts'
 import { safeProviderError, toProviderError } from './providers/providerErrors'
+import { createWebmAudioChunker, type AudioChunker, type AudioChunkSet } from './audioChunker'
+import { WebmSplitError } from '../media/webmSplit'
 import { PROCESS_OWNER_ID } from './processingOwner'
 
 export interface TranscriptionResult {
@@ -62,9 +65,10 @@ export function collapseRepeatedSegments(
 export class TranscriptionService {
   constructor(
     private readonly meetings: MeetingRepository,
-    private readonly resolveProvider: () => Pick<TranscriptionProvider, 'transcribe'>,
+    private readonly resolveProvider: () => Pick<TranscriptionProvider, 'transcribe' | 'maxAudioDurationSeconds'>,
     private readonly recordingsDirectory: string,
     private readonly ownerId = PROCESS_OWNER_ID,
+    private readonly chunker: AudioChunker = createWebmAudioChunker(tmpdir()),
   ) {}
 
   async transcribeMeeting(
@@ -96,35 +100,46 @@ export class TranscriptionService {
       const meetingPrefix = createHash('sha256').update(meetingId, 'utf8').digest('hex')
 
       for (const [partIndex, part] of parts.entries()) {
-        const response = await provider.transcribe({
-          filePath: part.filePath,
-          ...(part.durationSeconds === undefined ? {} : { recordingDurationSeconds: part.durationSeconds }),
-        })
-        validateProviderTiming(response)
-        response.segments.forEach((segment, segmentIndex) => {
-          const providerSpeaker = segment.speakerLabel === null
-            ? null
-            : encodeURIComponent(segment.speakerLabel)
-          const speakerId = providerSpeaker === null
-            ? null
-            : `${meetingPrefix}:${partIndex}:${providerSpeaker}`
-          if (speakerId !== null) {
-            speakers.set(speakerId, {
-              id: speakerId,
-              meetingId,
-              displayName: `Speaker ${segment.speakerLabel}`,
+        const pieces = await this.fittingPieces(part, provider.maxAudioDurationSeconds)
+        try {
+          for (const [pieceIndex, piece] of pieces.chunks.entries()) {
+            // A provider names its speakers per request, so labels from two
+            // requests are not the same people. Each piece keeps its own
+            // namespace, exactly as separate recording parts already do.
+            const namespace = pieces.chunks.length === 1 ? `${partIndex}` : `${partIndex}.${pieceIndex}`
+            const response = await provider.transcribe({
+              filePath: piece.filePath,
+              ...(piece.durationSeconds === undefined ? {} : { recordingDurationSeconds: piece.durationSeconds }),
             })
+            validateProviderTiming(response)
+            response.segments.forEach((segment, segmentIndex) => {
+              const providerSpeaker = segment.speakerLabel === null
+                ? null
+                : encodeURIComponent(segment.speakerLabel)
+              const speakerId = providerSpeaker === null
+                ? null
+                : `${meetingPrefix}:${namespace}:${providerSpeaker}`
+              if (speakerId !== null) {
+                speakers.set(speakerId, {
+                  id: speakerId,
+                  meetingId,
+                  displayName: `Speaker ${segment.speakerLabel}`,
+                })
+              }
+              segments.push({
+                id: `${meetingPrefix}:${namespace}:${providerSpeaker ?? 'segment'}:${segmentIndex}`,
+                meetingId,
+                speakerId,
+                startMs: Math.round((offsetSeconds + segment.startSeconds) * 1_000),
+                endMs: Math.round((offsetSeconds + segment.endSeconds) * 1_000),
+                text: segment.text,
+              })
+            })
+            offsetSeconds += response.durationSeconds
           }
-          segments.push({
-            id: `${meetingPrefix}:${partIndex}:${providerSpeaker ?? 'segment'}:${segmentIndex}`,
-            meetingId,
-            speakerId,
-            startMs: Math.round((offsetSeconds + segment.startSeconds) * 1_000),
-            endMs: Math.round((offsetSeconds + segment.endSeconds) * 1_000),
-            text: segment.text,
-          })
-        })
-        offsetSeconds += response.durationSeconds
+        } finally {
+          await pieces.dispose()
+        }
       }
 
       const result = this.meetings.completeTranscription(
@@ -157,6 +172,25 @@ export class TranscriptionService {
     }
   }
 
+  // Recordings made before parts were rolled on length, and any part a future
+  // provider considers too long, are cut into acceptable pieces on the way out.
+  private async fittingPieces(
+    part: { filePath: string; durationSeconds?: number },
+    maxAudioDurationSeconds: number | undefined,
+  ): Promise<AudioChunkSet> {
+    if (maxAudioDurationSeconds === undefined) {
+      return { chunks: [part], dispose: async () => { /* nothing was written */ } }
+    }
+    try {
+      return await this.chunker.chunk({ ...part, maxDurationSeconds: maxAudioDurationSeconds })
+    } catch (error) {
+      if (error instanceof WebmSplitError) {
+        throw safeProviderError('TRANSCRIPTION_INVALID_AUDIO', 'The transcription provider could not process this audio file.', false)
+      }
+      throw error
+    }
+  }
+
   private async finalizedParts(meetingId: string): Promise<Array<{ filePath: string; durationSeconds?: number }>> {
     const resolvedRoot = await realpath(this.recordingsDirectory)
     const meeting = this.meetings.requireById(meetingId)
@@ -174,7 +208,8 @@ export class TranscriptionService {
       throw safeProviderError('TRANSCRIPTION_INVALID_AUDIO', 'The transcription provider could not process this audio file.', false)
     }
     return Promise.all(
-      parts.map(async ({ name, ...part }) => {
+      parts.map(async ({ name, durationSeconds }) => {
+        const part = durationSeconds === undefined ? {} : { durationSeconds }
         const candidate = join(this.recordingsDirectory, name)
         const details = await lstat(candidate)
         if (details.isSymbolicLink() || !details.isFile()) {

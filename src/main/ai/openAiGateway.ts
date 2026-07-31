@@ -4,6 +4,7 @@ import { Agent } from 'undici'
 import { z } from 'zod'
 import type { CredentialStore } from '../credentials/credentialStore'
 import { safeOpenAiError, toOpenAiError, toSummaryOpenAiError } from './openAiErrors'
+import { reportProviderFailure } from './providerDiagnostics'
 import type { SummaryRequest } from './providers/providerPorts'
 
 export interface TranscriptionRequest {
@@ -114,7 +115,9 @@ export class OpenAiGateway implements OpenAiGatewayPort {
         maxRetries: 0,
       })
     } catch (error) {
-      throw toOpenAiError(error)
+      const typed = toOpenAiError(error)
+      reportProviderFailure('openai.transcribe', typed.code, error, [request.filePath])
+      throw typed
     }
     const parsed = responseSchema.safeParse(response)
     if (!parsed.success) {
@@ -207,7 +210,9 @@ export class OpenAiSummaryGateway implements OpenAiSummaryGatewayPort {
         },
       })
     } catch (error) {
-      throw toSummaryOpenAiError(error)
+      const typed = toSummaryOpenAiError(error)
+      reportProviderFailure('openai.summarize', typed.code, error)
+      throw typed
     }
     const parsed = responsesResultSchema.safeParse(response)
     if (!parsed.success) throw safeOpenAiError('OPENAI_MALFORMED_SUMMARY')
