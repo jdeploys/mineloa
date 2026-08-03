@@ -560,11 +560,15 @@ describe('TranscriptionService', () => {
       },
     }
     const reports: unknown[] = []
+    // Progress is reported to the orchestrator, so drive the orchestrated path
+    // the way ProcessingService does.
+    const attempt = h.meetings.beginProcessingAttempt('meeting-1', 'transcribing', PROCESS_OWNER_ID)
+    h.meetings.beginTranscription('meeting-1')
 
     await new TranscriptionService(
       h.meetings, () => provider, h.recordingsDirectory, undefined, chunker, () => clock,
     ).transcribeMeeting('meeting-1', {
-      attemptId: h.meetings.beginProcessingAttempt('meeting-1', 'transcribing', PROCESS_OWNER_ID).id,
+      attemptId: attempt.id,
       ownerId: PROCESS_OWNER_ID,
       onProgress: (report) => reports.push(report),
     })
@@ -582,7 +586,7 @@ describe('TranscriptionService', () => {
         completedUnits: 1,
         totalUnits: 2,
         pendingAudioMs: 850_978,
-        msPerAudioMs: 0.1,
+        msPerAudioMs: expect.closeTo(0.1, 6),
       },
     ])
     h.database.close()
