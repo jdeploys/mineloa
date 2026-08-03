@@ -5,6 +5,22 @@ export interface SummaryJsonSchema {
   [key: string]: unknown
 }
 
+// The model cites the transcript segment an item came from instead of writing a
+// time itself. A number can be checked against the transcript; a timestamp the
+// model invented cannot, and an invented time in a meeting record is worse than
+// no time at all.
+const nullableSourceIndex = { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }] }
+
+const summaryItemSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['text', 'sourceIndex'],
+  properties: {
+    text: { type: 'string', minLength: 1 },
+    sourceIndex: nullableSourceIndex,
+  },
+}
+
 export function buildSummaryJsonSchema(
   template: SummaryTemplate,
   speakerIds: readonly string[],
@@ -29,7 +45,7 @@ export function buildSummaryJsonSchema(
             sectionId: { type: 'string', enum: template.sections.map(({ id }) => id) },
             kind: { type: 'string', enum: ['paragraph', 'bullet_list', 'action_items'] },
             text: { type: 'string' },
-            items: { type: 'array', items: { type: 'string' } },
+            items: { type: 'array', items: summaryItemSchema },
           },
         },
       },
@@ -38,11 +54,12 @@ export function buildSummaryJsonSchema(
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['content', 'assigneeSpeakerId', 'dueAt'],
+          required: ['content', 'assigneeSpeakerId', 'dueAt', 'sourceIndex'],
           properties: {
             content: { type: 'string', minLength: 1 },
             assigneeSpeakerId: nullableSpeaker,
             dueAt: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+            sourceIndex: nullableSourceIndex,
           },
         },
       },
@@ -58,12 +75,16 @@ export function createSummaryResponseSchema(template: SummaryTemplate, speakerId
       sectionId: z.string(),
       kind: z.enum(['paragraph', 'bullet_list', 'action_items']),
       text: z.string(),
-      items: z.array(z.string()),
+      items: z.array(z.object({
+        text: z.string(),
+        sourceIndex: z.number().int().nonnegative().nullable(),
+      }).strict()),
     }).strict()),
     actionItems: z.array(z.object({
       content: z.string().min(1),
       assigneeSpeakerId: z.string().nullable(),
       dueAt: z.string().nullable(),
+      sourceIndex: z.number().int().nonnegative().nullable(),
     }).strict()),
   }).strict().superRefine((value, context) => {
     if (value.sections.length !== template.sections.length) {

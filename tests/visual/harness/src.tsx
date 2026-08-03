@@ -111,11 +111,11 @@ const detail: MeetingDocument = {
   ],
   summarySections: [
     { id: 'a', title: '핵심 요약', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000001', kind: 'paragraph' as const, text: '온보딩 흐름을 단순화하고 핵심 가치를 앞당겨 보여주기로 했습니다.', items: [], orderIndex: 0 },
-    { id: 'b', title: '결정사항', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000002', kind: 'bullet_list' as const, text: '', items: ['첫 화면의 선택지를 세 개에서 하나로 줄입니다.'], orderIndex: 1 },
+    { id: 'b', title: '결정사항', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000002', kind: 'bullet_list' as const, text: '', items: [{ text: '첫 화면의 선택지를 세 개에서 하나로 줄입니다.', atMs: 184_000 }], orderIndex: 1 },
     { id: 'action', title: '할 일', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000003', kind: 'action_items' as const, text: '', items: [], orderIndex: 2 },
-    { id: 'c', title: '주요 논의', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000004', kind: 'bullet_list' as const, text: '', items: ['초기 이탈 지표와 첫 가치 도달 시간을 함께 확인합니다.'], orderIndex: 3 },
+    { id: 'c', title: '주요 논의', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000004', kind: 'bullet_list' as const, text: '', items: [{ text: '초기 이탈 지표와 첫 가치 도달 시간을 함께 확인합니다.', atMs: 902_000 }], orderIndex: 3 },
   ],
-  actionItems: [{ id: 'x', meetingId: 'meeting-1', content: '온보딩 흐름 초안 작성', assigneeSpeakerId: '0:B', dueAt: null, completed: false }],
+  actionItems: [{ id: 'x', meetingId: 'meeting-1', content: '온보딩 흐름 초안 작성', assigneeSpeakerId: '0:B', dueAt: null, atMs: 724_000, completed: false }],
 }
 
 function desktopApiFor(state: string): DesktopApi {

@@ -129,8 +129,85 @@ describe('SummaryService', () => {
     expect(schema.properties.sections.items.required).toEqual(['sectionId', 'kind', 'text', 'items'])
     expect(schema.properties.sections.items.properties.sectionId.enum).toEqual(h.template.sections.map(({ id }) => id))
     expect(schema.properties.actionItems.items.additionalProperties).toBe(false)
-    expect(schema.properties.actionItems.items.required).toEqual(['content', 'assigneeSpeakerId', 'dueAt'])
+    expect(schema.properties.actionItems.items.required).toEqual(['content', 'assigneeSpeakerId', 'dueAt', 'sourceIndex'])
     expect(schema.properties.actionItems.items.properties.assigneeSpeakerId.anyOf[0].enum).toEqual(['0:A', '0:B'])
+    h.database.close()
+  })
+
+  // The model cites transcript lines; the time comes from the transcript itself,
+  // so a summary can never carry a moment the meeting did not have.
+  it('times each item from the transcript line it cites and orders them by it', async () => {
+    const h = harness()
+    const gateway = {
+      summarize: vi.fn(async () => JSON.stringify({
+        sections: [
+          { sectionId: h.template.sections[0]?.id, kind: 'paragraph', text: 'Ship approved', items: [] },
+          { sectionId: h.template.sections[1]?.id, kind: 'bullet_list', text: '', items: [
+            { text: 'raised second', sourceIndex: 1 },
+            { text: 'raised first', sourceIndex: 0 },
+          ] },
+          { sectionId: h.template.sections[2]?.id, kind: 'action_items', text: '', items: [] },
+        ],
+        actionItems: [
+          { content: 'later', assigneeSpeakerId: '0:B', dueAt: null, sourceIndex: 1 },
+          { content: 'earlier', assigneeSpeakerId: '0:A', dueAt: null, sourceIndex: 0 },
+        ],
+      })),
+    }
+
+    await new SummaryService(h.meetings, h.templates, () => gateway).summarizeMeeting('meeting-1')
+
+    expect(h.meetings.listSummarySections('meeting-1')[1]?.items).toEqual([
+      { text: 'raised first', atMs: 0 },
+      { text: 'raised second', atMs: 1_000 },
+    ])
+    expect(h.meetings.listActionItems('meeting-1').map(({ content, atMs }) => ({ content, atMs }))).toEqual([
+      { content: 'earlier', atMs: 0 },
+      { content: 'later', atMs: 1_000 },
+    ])
+    h.database.close()
+  })
+
+  it('numbers the transcript it sends so a citation can name a line', async () => {
+    const h = harness()
+    const summarize = vi.fn(async (_request: { input: string; schema: unknown }) => JSON.stringify({
+      sections: h.template.sections.map((section) => ({ sectionId: section.id, kind: section.kind, text: '', items: [] })),
+      actionItems: [],
+    }))
+
+    await new SummaryService(h.meetings, h.templates, () => ({ summarize })).summarizeMeeting('meeting-1')
+
+    const input = summarize.mock.calls[0]![0].input
+    expect(input).toContain('#0 [0:A] Ship it.')
+    expect(input).toContain('#1 [0:B] I will.')
+  })
+
+  // A citation that names no real line costs that item its time. Losing a
+  // thirty minute summary over one bad number would be far worse.
+  it('keeps an item whose citation names no transcript line, without a time', async () => {
+    const h = harness()
+    const gateway = {
+      summarize: vi.fn(async () => JSON.stringify({
+        sections: [
+          { sectionId: h.template.sections[0]?.id, kind: 'paragraph', text: '', items: [] },
+          { sectionId: h.template.sections[1]?.id, kind: 'bullet_list', text: '', items: [
+            { text: 'out of range', sourceIndex: 999 },
+            { text: 'not placed', sourceIndex: null },
+            { text: 'real', sourceIndex: 1 },
+          ] },
+          { sectionId: h.template.sections[2]?.id, kind: 'action_items', text: '', items: [] },
+        ],
+        actionItems: [],
+      })),
+    }
+
+    await new SummaryService(h.meetings, h.templates, () => gateway).summarizeMeeting('meeting-1')
+
+    expect(h.meetings.listSummarySections('meeting-1')[1]?.items).toEqual([
+      { text: 'real', atMs: 1_000 },
+      { text: 'out of range', atMs: null },
+      { text: 'not placed', atMs: null },
+    ])
     h.database.close()
   })
 
@@ -141,10 +218,10 @@ describe('SummaryService', () => {
       summarize: vi.fn(async () => JSON.stringify({
         sections: [
           { sectionId: h.template.sections[0]?.id, kind: 'paragraph', text: 'Ship approved', items: [] },
-          { sectionId: h.template.sections[1]?.id, kind: 'bullet_list', text: '', items: ['Release discussed'] },
+          { sectionId: h.template.sections[1]?.id, kind: 'bullet_list', text: '', items: [{ text: 'Release discussed', sourceIndex: 1 }] },
           { sectionId: h.template.sections[2]?.id, kind: 'action_items', text: '', items: [] },
         ],
-        actionItems: [{ content: 'Deploy', assigneeSpeakerId: '0:B', dueAt: null }],
+        actionItems: [{ content: 'Deploy', assigneeSpeakerId: '0:B', dueAt: null, sourceIndex: 1 }],
       })),
     }
     const resolveProvider = vi.fn(() => gateway)

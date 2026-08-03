@@ -134,6 +134,9 @@
 .meeting-document > .document-section p, .meeting-document > .document-section li { line-height: 1.75; }
 .meeting-document > .document-section > p { margin: 0; color: var(--ink-muted); }
 .meeting-document > .document-section > ul:not(.action-list) { display: grid; gap: 8px; margin: 0; padding-left: 22px; color: var(--ink-muted); }
+/* A source time reads as a fixed-width gutter so the eye can scan the order. */
+.summary-item-time { color: var(--ink-subtle); font-variant-numeric: tabular-nums; font-size: 0.875rem; margin-right: 8px; white-space: nowrap; }
+.action-list li .summary-item-time { margin-right: 0; }
 .action-list { margin: 0; list-style: none; padding: 0; }
 .action-list li { display: flex; justify-content: space-between; gap: 18px; padding: 11px 0; border-bottom: 1px solid var(--hairline); }
 .action-list li:first-child { padding-top: 0; }

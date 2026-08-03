@@ -26,6 +26,7 @@ describe('processing settings repository', () => {
     existing.exec(`
       CREATE TABLE existing_data (value TEXT NOT NULL);
       INSERT INTO existing_data VALUES ('preserve-me');
+      CREATE TABLE action_items (id TEXT PRIMARY KEY, meeting_id TEXT NOT NULL, content TEXT NOT NULL, assignee_speaker_id TEXT, due_at TEXT, completed INTEGER NOT NULL DEFAULT 0);
       PRAGMA user_version = 2;
     `)
     existing.close()
@@ -39,7 +40,7 @@ describe('processing settings repository', () => {
       localWhisperModel: 'base',
     })
     expect(database.prepare('SELECT value FROM existing_data').pluck().get()).toBe('preserve-me')
-    expect(database.pragma('user_version', { simple: true })).toBe(3)
+    expect(database.pragma('user_version', { simple: true })).toBe(4)
     database.close()
   })
 

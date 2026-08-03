@@ -27,6 +27,7 @@ describe('migration 2', () => {
         ('same-time-older-row', 'm2', 'transcribing', '2026-01-03T00:00:00.000Z', NULL, NULL, NULL),
         ('same-time-newer-row', 'm2', 'summarizing', '2026-01-03T00:00:00.000Z', NULL, NULL, NULL),
         ('history', 'm1', 'transcription', '2025-01-01T00:00:00.000Z', '2025-01-01T00:01:00.000Z', 0, '{"code":"OLD"}');
+      CREATE TABLE action_items (id TEXT PRIMARY KEY, meeting_id TEXT NOT NULL, content TEXT NOT NULL, assignee_speaker_id TEXT, due_at TEXT, completed INTEGER NOT NULL DEFAULT 0);
       PRAGMA user_version = 1;
     `)
 
@@ -40,7 +41,7 @@ describe('migration 2', () => {
       expect(JSON.parse(row.sanitized_error)).toEqual({ code: 'PROCESSING_INTERRUPTED', message: 'Processing was interrupted. Try again.', retryable: true })
     }
     expect(rows.find(({ id }) => id === 'history')).toMatchObject({ sanitized_error: '{"code":"OLD"}' })
-    expect(db.pragma('user_version', { simple: true })).toBe(3)
+    expect(db.pragma('user_version', { simple: true })).toBe(4)
     expect(() => db.prepare(`INSERT INTO processing_attempts (id, meeting_id, stage, started_at) VALUES ('duplicate', 'm1', 'cleanup', '2026-01-04')`).run()).toThrow()
     db.close()
   })

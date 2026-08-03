@@ -33,6 +33,36 @@ describe('meeting IPC validation', () => {
     expect(JSON.stringify(result)).not.toContain('private.webm')
   })
 
+  // Parts store the meeting mark they closed at, so passing them straight to a
+  // player showed part 2 of a 71 minute meeting as 40:05 instead of 20:02.
+  it('reports each audio part with its own playable length', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const now = '2026-08-03T00:00:00.000Z'
+    const meeting = { id: 'meeting-1', title: '회의', createdAt: now, updatedAt: now, durationMs: 4_264_729, status: 'completed', audioPolicy: 'keep', audioPath: 'part-0.webm', audioByteCount: 34_548_300, selectedTemplateId: null }
+    const repository = {
+      listRecent: vi.fn(), searchRecent: vi.fn(), create: vi.fn(), requireById: vi.fn(() => meeting),
+      listSpeakers: vi.fn(() => []), listTranscript: vi.fn(() => []), listSummarySections: vi.fn(() => []),
+      listActionItems: vi.fn(() => []), renameMeeting: vi.fn(), renameSpeaker: vi.fn(),
+      listRecordingParts: vi.fn(() => [
+        { meetingId: 'meeting-1', partIndex: 0, relativePath: 'part-0.webm', byteCount: 9_741_618, durationMs: 1_202_551 },
+        { meetingId: 'meeting-1', partIndex: 1, relativePath: 'part-1.webm', byteCount: 9_741_618, durationMs: 2_405_082 },
+        { meetingId: 'meeting-1', partIndex: 2, relativePath: 'part-2.webm', byteCount: 9_741_618, durationMs: 3_607_592 },
+        { meetingId: 'meeting-1', partIndex: 3, relativePath: 'part-3.webm', byteCount: 5_323_446, durationMs: 4_264_729 },
+      ]),
+    }
+    registerMeetingHandlers({ handle: (channel, handler) => handlers.set(channel, handler) }, repository as never, templates as never)
+
+    const result = await handlers.get('meetings:get')?.({}, 'meeting-1') as { audioParts: Array<{ partIndex: number; durationMs: number }> }
+
+    expect(result.audioParts.map(({ partIndex, durationMs }) => ({ partIndex, durationMs }))).toEqual([
+      { partIndex: 0, durationMs: 1_202_551 },
+      { partIndex: 1, durationMs: 1_202_531 },
+      { partIndex: 2, durationMs: 1_202_510 },
+      { partIndex: 3, durationMs: 657_137 },
+    ])
+    expect(result.audioParts.reduce((total, part) => total + part.durationMs, 0)).toBe(meeting.durationMs)
+  })
+
   it('trims and persists a meeting title through the public contract', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const now = '2026-07-15T00:00:00.000Z'

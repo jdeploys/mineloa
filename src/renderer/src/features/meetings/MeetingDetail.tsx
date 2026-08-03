@@ -15,6 +15,7 @@ import { Transcript } from './Transcript'
 import { ProcessingStatus } from './ProcessingStatus'
 import { AudioPlayer } from './AudioPlayer'
 import { meetingStatusLabel } from './meetingStatusLabel'
+import { summaryItemLine, summaryTimeLabel } from '../../../../shared/summaryItemTime'
 
 function formatDuration(durationMs: number): string {
   const minutes = Math.floor(durationMs / 60_000)
@@ -29,7 +30,10 @@ function replaceSpeakerIds(value: string, speakers: readonly Speaker[]): string 
 function sectionBody(section: DocumentSummarySection | undefined, speakers: readonly Speaker[]) {
   if (!section) return <p className="muted">내용이 없습니다.</p>
   if (section.kind === 'paragraph') return <p>{replaceSpeakerIds(section.text, speakers)}</p>
-  return section.items.length === 0 ? <p className="muted">내용이 없습니다.</p> : <ul>{section.items.map((item, index) => <li key={index}>{replaceSpeakerIds(item, speakers)}</li>)}</ul>
+  return section.items.length === 0 ? <p className="muted">내용이 없습니다.</p> : <ul>{section.items.map((item, index) => {
+    const at = summaryTimeLabel(item.atMs)
+    return <li key={index}>{at && <span className="summary-item-time">{at}</span>}{replaceSpeakerIds(item.text, speakers)}</li>
+  })}</ul>
 }
 
 function markdown(document: MeetingDocument, speakers: readonly Speaker[]): string {
@@ -39,10 +43,10 @@ function markdown(document: MeetingDocument, speakers: readonly Speaker[]): stri
   for (const section of ordered) {
     lines.push(`## ${section.title}`)
     if (section.kind === 'action_items') {
-      for (const item of document.actionItems) lines.push(`- ${item.content} (담당: ${item.assigneeSpeakerId === null ? '미정' : names.get(item.assigneeSpeakerId) ?? item.assigneeSpeakerId})`)
+      for (const item of document.actionItems) lines.push(`- ${summaryItemLine(item.atMs, item.content)} (담당: ${item.assigneeSpeakerId === null ? '미정' : names.get(item.assigneeSpeakerId) ?? item.assigneeSpeakerId})`)
     } else {
       if (section.text) lines.push(replaceSpeakerIds(section.text, speakers))
-      for (const item of section.items) lines.push(`- ${replaceSpeakerIds(item, speakers)}`)
+      for (const item of section.items) lines.push(`- ${summaryItemLine(item.atMs, replaceSpeakerIds(item.text, speakers))}`)
     }
     lines.push('')
   }
@@ -229,7 +233,7 @@ export function MeetingDetail({ document, onBack, onRenameMeeting, onRenameSpeak
       {archiveMessage === null ? null : <InlineNotice tone={archiveMessage.tone} title="내보내기 결과"><p role="status">{archiveMessage.message}</p></InlineNotice>}
     </SurfaceCard>
     {hasDocumentContent ? <article className="meeting-document" aria-label="회의 문서">
-      {orderedSections.map((section) => <section className="document-section" key={section.id}><h2>{section.title}</h2>{section.kind === 'action_items' ? (document.actionItems.length === 0 ? <p className="muted">등록된 할 일이 없습니다.</p> : <ul className="action-list">{document.actionItems.map((item) => <li key={item.id}><span>{item.content}</span><small>담당: {item.assigneeSpeakerId === null ? '미정' : names.get(item.assigneeSpeakerId) ?? item.assigneeSpeakerId}</small></li>)}</ul>) : sectionBody(section, speakers)}</section>)}
+      {orderedSections.map((section) => <section className="document-section" key={section.id}><h2>{section.title}</h2>{section.kind === 'action_items' ? (document.actionItems.length === 0 ? <p className="muted">등록된 할 일이 없습니다.</p> : <ul className="action-list">{document.actionItems.map((item) => <li key={item.id}>{summaryTimeLabel(item.atMs) && <span className="summary-item-time">{summaryTimeLabel(item.atMs)}</span>}<span>{item.content}</span><small>담당: {item.assigneeSpeakerId === null ? '미정' : names.get(item.assigneeSpeakerId) ?? item.assigneeSpeakerId}</small></li>)}</ul>) : sectionBody(section, speakers)}</section>)}
       {speakers.length > 0 ? <section className="document-section"><h2>화자 이름</h2><SpeakerEditor speakers={speakers} onRename={rename} /></section> : null}
       {document.transcript.length > 0 ? <section className="document-section"><h2>전체 대화 내용</h2><Transcript segments={document.transcript} speakers={speakers} /></section> : null}
       <details className="document-section markdown-preview"><summary>Markdown 미리보기</summary><pre className="markdown-code" data-testid="markdown-preview">{markdown(document, speakers)}</pre></details>

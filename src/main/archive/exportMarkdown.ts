@@ -1,9 +1,11 @@
+import { summaryItemLine } from '../../shared/summaryItemTime'
+
 export interface MarkdownMeetingDocument {
   meeting: { title: string; createdAt: string; durationMs: number }
   speakers: readonly { id: string; displayName: string }[]
   transcript: readonly { speakerId: string | null; startMs: number; endMs: number; text: string }[]
-  summarySections: readonly { templateSectionId: string; title: string; kind: 'paragraph' | 'bullet_list' | 'action_items'; text: string; items: readonly string[]; orderIndex: number }[]
-  actionItems: readonly { content: string; assigneeSpeakerId: string | null; dueAt: string | null; completed: boolean }[]
+  summarySections: readonly { templateSectionId: string; title: string; kind: 'paragraph' | 'bullet_list' | 'action_items'; text: string; items: readonly { text: string; atMs: number | null }[]; orderIndex: number }[]
+  actionItems: readonly { content: string; assigneeSpeakerId: string | null; dueAt: string | null; atMs: number | null; completed: boolean }[]
 }
 
 function timestamp(ms: number): string {
@@ -26,12 +28,12 @@ export function exportMarkdown(document: MarkdownMeetingDocument): string {
     if (section.kind === 'action_items') {
       for (const item of document.actionItems) {
         const owner = item.assigneeSpeakerId === null ? '담당자 없음' : (names.get(item.assigneeSpeakerId) ?? '알 수 없는 화자')
-        lines.push(`- [${item.completed ? 'x' : ' '}] ${owner} — ${item.content}${item.dueAt ? ` (${item.dueAt})` : ''}`)
+        lines.push(`- [${item.completed ? 'x' : ' '}] ${owner} — ${summaryItemLine(item.atMs, item.content)}${item.dueAt ? ` (${item.dueAt})` : ''}`)
       }
       if (document.actionItems.length) lines.push('')
     } else {
       if (section.text) lines.push(withSpeakerNames(section.text, document.speakers), '')
-      for (const item of section.items) lines.push(`- ${withSpeakerNames(item, document.speakers)}`)
+      for (const item of section.items) lines.push(`- ${summaryItemLine(item.atMs, withSpeakerNames(item.text, document.speakers))}`)
       if (section.items.length) lines.push('')
     }
   }

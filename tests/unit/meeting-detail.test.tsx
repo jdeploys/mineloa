@@ -19,11 +19,11 @@ const documentFixture = (): MeetingDocument => ({
   transcript: [{ id: 's1', meetingId: 'meeting-1', speakerId: '0:B', startMs: 1_000, endMs: 2_500, text: '원본 발언입니다.' }],
   summarySections: [
     { id: 'a', title: '핵심 요약', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000001', kind: 'paragraph', text: '0:B가 제안을 설명했습니다.', items: [], orderIndex: 0 },
-    { id: 'b', title: '결정사항', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000002', kind: 'bullet_list', text: '', items: ['제안을 채택합니다.'], orderIndex: 1 },
-    { id: 'action-section', title: '할 일', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000003', kind: 'action_items', text: '', items: ['이 문구는 주요 논의가 아닙니다.'], orderIndex: 2 },
-    { id: 'c', title: '주요 논의', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000004', kind: 'bullet_list', text: '', items: ['근거를 검토했습니다.'], orderIndex: 3 },
+    { id: 'b', title: '결정사항', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000002', kind: 'bullet_list', text: '', items: [{ text: '제안을 채택합니다.', atMs: 12_000 }], orderIndex: 1 },
+    { id: 'action-section', title: '할 일', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000003', kind: 'action_items', text: '', items: [{ text: '이 문구는 주요 논의가 아닙니다.', atMs: null }], orderIndex: 2 },
+    { id: 'c', title: '주요 논의', meetingId: 'meeting-1', templateSectionId: '10000000-0000-4000-8000-000000000004', kind: 'bullet_list', text: '', items: [{ text: '근거를 검토했습니다.', atMs: 5_000 }], orderIndex: 3 },
   ],
-  actionItems: [{ id: 'todo', meetingId: 'meeting-1', content: '초안 작성', assigneeSpeakerId: '0:B', dueAt: null, completed: false }],
+  actionItems: [{ id: 'todo', meetingId: 'meeting-1', content: '초안 작성', assigneeSpeakerId: '0:B', dueAt: null, atMs: 61_000, completed: false }],
 })
 
 describe('single-document meeting detail', () => {
@@ -225,7 +225,7 @@ describe('single-document meeting detail', () => {
       { partIndex: 1, url: 'nnote-media://meeting/bWVldGluZy0x/part/1', byteCount: 5, durationMs: 35_000 },
     ]
     source.summarySections = [
-      { id: 'x', title: '위험 요소', meetingId: 'meeting-1', templateSectionId: '30000000-0000-4000-8000-000000000001', kind: 'bullet_list', text: '', items: ['일정'], orderIndex: 0 },
+      { id: 'x', title: '위험 요소', meetingId: 'meeting-1', templateSectionId: '30000000-0000-4000-8000-000000000001', kind: 'bullet_list', text: '', items: [{ text: '일정', atMs: null }], orderIndex: 0 },
       { id: 'y', title: '후속 조치', meetingId: 'meeting-1', templateSectionId: '30000000-0000-4000-8000-000000000002', kind: 'action_items', text: '', items: [], orderIndex: 1 },
       { id: 'z', title: '결론', meetingId: 'meeting-1', templateSectionId: '30000000-0000-4000-8000-000000000003', kind: 'paragraph', text: '진행', items: [], orderIndex: 2 },
     ]

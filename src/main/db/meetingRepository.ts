@@ -61,7 +61,15 @@ interface ActionItemRow {
   content: string
   assignee_speaker_id: string | null
   due_at: string | null
+  at_ms: number | null
   completed: number
+}
+
+// Summaries written before items cited their source hold plain strings. They
+// stay readable; they simply have no time to show.
+function storedSummaryItems(value: unknown): unknown {
+  if (!Array.isArray(value)) return value
+  return value.map((item) => (typeof item === 'string' ? { text: item, atMs: null } : item))
 }
 
 interface RecordingPartRow {
@@ -490,12 +498,12 @@ export class MeetingRepository {
       }
       const insertAction = this.database.prepare(
         `INSERT INTO action_items
-          (id, meeting_id, content, assignee_speaker_id, due_at, completed)
-         VALUES (?, ?, ?, ?, ?, 0)`,
+          (id, meeting_id, content, assignee_speaker_id, due_at, at_ms, completed)
+         VALUES (?, ?, ?, ?, ?, ?, 0)`,
       )
       for (const value of actionItems) {
         const item = StoredActionItemSchema.parse({ ...value, id: randomUUID(), meetingId, completed: false })
-        insertAction.run(item.id, meetingId, item.content, item.assigneeSpeakerId, item.dueAt)
+        insertAction.run(item.id, meetingId, item.content, item.assigneeSpeakerId, item.dueAt, item.atMs)
       }
   }
 
@@ -687,7 +695,7 @@ export class MeetingRepository {
         templateSectionId: row.template_section_id,
         kind: row.kind,
         text: content.text,
-        items: content.items,
+        items: storedSummaryItems(content.items),
         orderIndex: row.order_index,
       })
     })
@@ -703,6 +711,7 @@ export class MeetingRepository {
       content: row.content,
       assigneeSpeakerId: row.assignee_speaker_id,
       dueAt: row.due_at,
+      atMs: row.at_ms,
       completed: row.completed === 1,
     }))
   }

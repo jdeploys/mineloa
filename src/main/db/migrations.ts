@@ -102,6 +102,13 @@ const migration3 = `
   PRAGMA user_version = 3;
 `
 
+// Action items now record where in the meeting they came from, so a reader can
+// follow them in the order they were raised. Existing rows keep a null time.
+const migration4 = `
+  ALTER TABLE action_items ADD COLUMN at_ms INTEGER;
+  PRAGMA user_version = 4;
+`
+
 const finishDuplicateAttempt = `
   UPDATE processing_attempts
   SET finished_at = ?, succeeded = 0, sanitized_error = ?
@@ -110,8 +117,8 @@ const finishDuplicateAttempt = `
 
 export function runMigrations(database: Database.Database): void {
   const version = database.pragma('user_version', { simple: true }) as number
-  if (version > 3) {
-    throw new Error(`Database version ${version} is newer than supported version 3`)
+  if (version > 4) {
+    throw new Error(`Database version ${version} is newer than supported version 4`)
   }
   if (version === 0) {
     database.exec('BEGIN IMMEDIATE')
@@ -167,6 +174,16 @@ export function runMigrations(database: Database.Database): void {
     database.exec('BEGIN IMMEDIATE')
     try {
       database.exec(migration3)
+      database.exec('COMMIT')
+    } catch (error) {
+      database.exec('ROLLBACK')
+      throw error
+    }
+  }
+  if ((database.pragma('user_version', { simple: true }) as number) === 3) {
+    database.exec('BEGIN IMMEDIATE')
+    try {
+      database.exec(migration4)
       database.exec('COMMIT')
     } catch (error) {
       database.exec('ROLLBACK')

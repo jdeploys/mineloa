@@ -73,7 +73,9 @@ export async function exportMeetingArchive(
       segments: repository.listTranscript(meetingId).map(({ id, speakerId, startMs, endMs, text }) => ({ id, speakerId, startMs, endMs, text })),
     })),
     'summary.json': strToU8(JSON.stringify({
-      sections: summarySections.map(({ id, templateSectionId, kind, text, items, orderIndex }) => ({ id, templateSectionId, kind, text, items, orderIndex })),
+      // The archive format predates item source times. Keep its shape so older
+      // builds can still read what this one writes; the times do not travel.
+      sections: summarySections.map(({ id, templateSectionId, kind, text, items, orderIndex }) => ({ id, templateSectionId, kind, text, items: items.map(({ text: itemText }) => itemText), orderIndex })),
       actionItems: repository.listActionItems(meetingId).map(({ id, content, assigneeSpeakerId, dueAt, completed }) => ({ id, content, assigneeSpeakerId, dueAt, completed })),
     })),
   }

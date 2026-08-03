@@ -24,6 +24,7 @@ import {
   type AppendChunkInput,
   type RecordingProgress,
 } from './recordingTypes'
+import { previousPartMarkMs } from './recordingPartDurations'
 
 interface ActiveHandle {
   partIndex: number
@@ -308,11 +309,8 @@ export class RecordingService {
     return { partIndex, lastChunkIndex: -1, byteCount: 0, durationMs: 0, completed: false }
   }
 
-  // Manifest parts carry the meeting duration reached when the part closed, so
-  // a part's own length is the distance from where the previous one ended.
   private partDurationMs(manifest: SessionManifest, partIndex: number, durationMs: number): number {
-    const previous = manifest.parts.filter((part) => part.partIndex < partIndex).at(-1)
-    return Math.max(0, durationMs - (previous?.durationMs ?? 0))
+    return Math.max(0, durationMs - previousPartMarkMs(manifest.parts, partIndex))
   }
 
   private progress(manifest: SessionManifest, rolledToPartIndex: number | null): RecordingProgress {

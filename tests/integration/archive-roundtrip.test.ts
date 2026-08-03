@@ -59,7 +59,7 @@ describe('Nnote archive round trip', () => {
     sourceDb.prepare('INSERT INTO speakers VALUES (?, ?, ?)').run('0:B', 'original', '홍길동')
     sourceDb.prepare('INSERT INTO transcript_segments VALUES (?, ?, ?, ?, ?, ?)').run('seg-old', 'original', '0:B', 0, 5000, '진행합니다')
     sourceDb.prepare('INSERT INTO summary_sections VALUES (?, ?, ?, ?, ?, ?)').run('sum-old', 'original', sectionId, 'action_items', JSON.stringify({ text: '', items: [] }), 0)
-    sourceDb.prepare('INSERT INTO action_items VALUES (?, ?, ?, ?, ?, ?)').run('act-old', 'original', '배포', '0:B', null, 0)
+    sourceDb.prepare('INSERT INTO action_items (id, meeting_id, content, assignee_speaker_id, due_at, completed) VALUES (?, ?, ?, ?, ?, ?)').run('act-old', 'original', '배포', '0:B', null, 0)
 
     const exported = await exportMeetingArchive('original', new MeetingRepository(sourceDb), new TemplateRepository(sourceDb), sourceRecordings)
     const parsed = parseArchive(exported.bytes)

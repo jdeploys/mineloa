@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
+import { ownDurationsMs } from '../recording/recordingPartDurations'
 import type { Meeting } from '../../shared/contracts/meeting'
 import {
   CreateRecordingMeetingInputSchema,
@@ -40,8 +41,11 @@ function getDocument(repository: MeetingRepositoryPort, templates: TemplateServi
   const template = templates.get(meeting.selectedTemplateId ?? DEFAULT_TEMPLATE_ID)
   const sectionTitles = new Map(template.sections.map((section) => [section.id, section.title]))
   const storedParts = repository.listRecordingParts?.(meeting.id) ?? []
+  // A player shows the file it can play, so each part reports its own length
+  // rather than the meeting mark it closed at.
+  const partDurations = ownDurationsMs(storedParts)
   const audioParts = storedParts.length > 0
-    ? storedParts.map((part) => ({ partIndex: part.partIndex, url: meetingMediaUrl(meeting.id, part.partIndex), byteCount: part.byteCount, durationMs: part.durationMs }))
+    ? storedParts.map((part, index) => ({ partIndex: part.partIndex, url: meetingMediaUrl(meeting.id, part.partIndex), byteCount: part.byteCount, durationMs: partDurations[index] }))
     : publicMeeting.hasAudio ? [{ partIndex: 0, url: meetingMediaUrl(meeting.id), byteCount: meeting.audioByteCount, durationMs: meeting.durationMs }] : []
   return MeetingDocumentSchema.parse({
     meeting: publicMeeting,

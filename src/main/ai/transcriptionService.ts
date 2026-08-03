@@ -8,6 +8,7 @@ import type { NormalizedTranscription, TranscriptionProvider } from './providers
 import { safeProviderError, toProviderError } from './providers/providerErrors'
 import { createWebmAudioChunker, type AudioChunker, type AudioChunkSet } from './audioChunker'
 import { WebmSplitError } from '../media/webmSplit'
+import { ownDurationsMs } from '../recording/recordingPartDurations'
 import { PROCESS_OWNER_ID } from './processingOwner'
 
 export interface TranscriptionResult {
@@ -244,13 +245,11 @@ export class TranscriptionService {
     const resolvedRoot = await realpath(this.recordingsDirectory)
     const meeting = this.meetings.requireById(meetingId)
     const durable = this.meetings.listRecordingParts(meetingId)
-    let previousDurationMs = 0
+    const durableDurations = ownDurationsMs(durable)
     const parts: Array<{ name: string; index: number; durationSeconds?: number }> = durable.length > 0
-      ? durable.map((part): { name: string; index: number; durationSeconds: number } => {
-          const durationMs = part.durationMs - previousDurationMs
-          previousDurationMs = part.durationMs
-          return { name: part.relativePath, index: part.partIndex, durationSeconds: durationMs / 1_000 }
-        })
+      ? durable.map((part, index): { name: string; index: number; durationSeconds: number } => ({
+          name: part.relativePath, index: part.partIndex, durationSeconds: durableDurations[index] / 1_000,
+        }))
       : meeting.audioPath === null ? [] : [{ name: meeting.audioPath, index: 0 }]
     if (parts.length === 0 || parts.some((part, index) => part.index !== index || basename(part.name) !== part.name
       || (part.durationSeconds !== undefined && (!Number.isFinite(part.durationSeconds) || part.durationSeconds < 0)))) {
