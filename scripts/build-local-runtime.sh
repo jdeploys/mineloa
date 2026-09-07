@@ -6,6 +6,10 @@ FFMPEG_TAG='n8.1.2'
 WHISPER_COMMIT='f049fff95a089aa9969deb009cdd4892b3e74916'
 FFMPEG_COMMIT='38b88335f99e76ed89ff3c93f877fdefce736c13'
 FFMPEG_FLAGS=(
+  # Without this, configure links whatever it finds on the build machine — a
+  # developer Mac with Homebrew produces an ffmpeg that will not load inside
+  # the signed app, while a clean CI runner produces a self-contained one.
+  --disable-autodetect
   --disable-gpl --disable-nonfree --disable-doc --disable-network
   --disable-ffplay --disable-ffprobe --disable-everything --enable-ffmpeg
   --enable-protocol=file --enable-demuxer=matroska --enable-decoder=opus
