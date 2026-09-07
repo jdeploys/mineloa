@@ -111,10 +111,17 @@ export class ProcessingService {
     return this.lock(meetingId, async () => {
       const meeting = this.meetings.requireById(meetingId)
       if (meeting.status !== 'recorded') throw new Error('Only a recorded meeting can start processing')
-      await this.runStage(meetingId, 'transcribing', () => this.meetings.beginTranscription(meetingId), (attempt) => this.transcribeReporting(meetingId, attempt))
-      await this.runStage(meetingId, 'summarizing', undefined, () => this.summary.summarizeMeeting(meetingId))
-      await this.applyRetention(meetingId)
-      return this.getStatus(meetingId)
+      return this.runFromTranscription(meetingId)
+    })
+  }
+
+  // A failure the current settings cannot retry is still not a dead end: after
+  // changing what caused it the user can put the saved audio through the whole
+  // pipeline again, discarding whatever the failed run produced.
+  async restart(meetingId: string): Promise<ProcessingStatus> {
+    return this.lock(meetingId, async () => {
+      if (this.getStatus(meetingId).state !== 'failed') throw new Error('Only a failed meeting can be processed again from the start')
+      return this.runFromTranscription(meetingId)
     })
   }
 
@@ -128,12 +135,17 @@ export class ProcessingService {
         await this.runStage(meetingId, 'summarizing', () => this.meetings.beginSummarization(meetingId), () => this.summary.summarizeMeeting(meetingId))
         await this.applyRetention(meetingId)
       } else {
-        await this.runStage(meetingId, 'transcribing', () => this.meetings.beginTranscription(meetingId), (attempt) => this.transcribeReporting(meetingId, attempt))
-        await this.runStage(meetingId, 'summarizing', undefined, () => this.summary.summarizeMeeting(meetingId))
-        await this.applyRetention(meetingId)
+        return this.runFromTranscription(meetingId)
       }
       return this.getStatus(meetingId)
     })
+  }
+
+  private async runFromTranscription(meetingId: string): Promise<ProcessingStatus> {
+    await this.runStage(meetingId, 'transcribing', () => this.meetings.beginTranscription(meetingId), (attempt) => this.transcribeReporting(meetingId, attempt))
+    await this.runStage(meetingId, 'summarizing', undefined, () => this.summary.summarizeMeeting(meetingId))
+    await this.applyRetention(meetingId)
+    return this.getStatus(meetingId)
   }
 
   // Retention is a decision the user can revisit while the audio still exists.

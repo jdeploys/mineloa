@@ -71,7 +71,7 @@ describe('single-document meeting detail', () => {
     const rename = vi.fn(async (_meetingId: string, _speakerId: string, displayName: string) => ({ ...source.speakers[0]!, displayName }))
     const processing = {
       getStatus: vi.fn(), process: vi.fn(),
-      retry: vi.fn(async () => ({ meetingId: 'meeting-1', state: 'completed' as const, failedStage: null, retryable: false, audioRequired: false, error: null })), setAudioPolicy: vi.fn(),
+      retry: vi.fn(async () => ({ meetingId: 'meeting-1', state: 'completed' as const, failedStage: null, retryable: false, audioRequired: false, error: null })), restart: vi.fn(), setAudioPolicy: vi.fn(),
       onProgress: vi.fn(() => () => undefined),
     }
     const archive = {
@@ -230,7 +230,7 @@ describe('single-document meeting detail', () => {
       { id: 'z', title: '결론', meetingId: 'meeting-1', templateSectionId: '30000000-0000-4000-8000-000000000003', kind: 'paragraph', text: '진행', items: [], orderIndex: 2 },
     ]
     const processing = {
-      getStatus: vi.fn(), process: vi.fn(async () => ({ meetingId: 'meeting-1', state: 'completed' as const, failedStage: null, retryable: false, audioRequired: false, error: null })), retry: vi.fn(), setAudioPolicy: vi.fn(), onProgress: vi.fn(() => () => undefined),
+      getStatus: vi.fn(), process: vi.fn(async () => ({ meetingId: 'meeting-1', state: 'completed' as const, failedStage: null, retryable: false, audioRequired: false, error: null })), retry: vi.fn(), restart: vi.fn(), setAudioPolicy: vi.fn(), onProgress: vi.fn(() => () => undefined),
     }
     const archive = {
       exportMeeting: vi.fn(async () => ({ status: 'success' as const, includedAudio: true, audioCoverage: 'all-parts' as const })),

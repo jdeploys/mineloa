@@ -43,9 +43,13 @@ export function ProcessingStatus({ meetingId, processing, initialStatus, onStatu
         : status.failedStage === 'summarizing' ? '회의록 작성 실패'
           : status.failedStage === 'cleanup' ? '원본 오디오 정리 실패'
             : status.state === 'completed' ? meetingStatusLabel('completed') : meetingStatusLabel('recorded')
-  const action = status.failedStage === 'transcribing' ? '음성 변환 다시 시도'
-    : status.failedStage === 'summarizing' ? '회의록 작성 다시 시도'
-      : status.failedStage === 'cleanup' ? '오디오 정리 다시 시도' : '회의록 만들기'
+  // Nothing about this failure can be resumed as it stands, but the audio is
+  // still here: offer the whole run again for after the user changes settings.
+  const restartOnly = status.state === 'failed' && !status.retryable
+  const action = restartOnly ? '처음부터 다시 만들기'
+    : status.failedStage === 'transcribing' ? '음성 변환 다시 시도'
+      : status.failedStage === 'summarizing' ? '회의록 작성 다시 시도'
+        : status.failedStage === 'cleanup' ? '오디오 정리 다시 시도' : '회의록 만들기'
   const tone = status.state === 'completed' ? 'success'
     : active ? 'info'
       : status.failedStage !== null ? (status.retryable ? 'warning' : 'error') : 'info'
@@ -57,7 +61,9 @@ export function ProcessingStatus({ meetingId, processing, initialStatus, onStatu
     setPending(true)
     setError(null)
     try {
-      const next = status.failedStage === null ? await processing.process(meetingId) : await processing.retry(meetingId)
+      const next = status.failedStage === null ? await processing.process(meetingId)
+        : restartOnly ? await processing.restart(meetingId)
+          : await processing.retry(meetingId)
       if (currentMeeting.current === requestedMeeting && requestGeneration.current === generation) {
         setStatus(next)
         onStatusChange?.(next)
@@ -94,7 +100,7 @@ export function ProcessingStatus({ meetingId, processing, initialStatus, onStatu
         {status.error && <span>{processingErrorMessage(status.error.code, status.retryable)}</span>}
       </div>
       {active ? <span className="processing-active" role="status" aria-label="처리 중"><Icon name="processing" />처리 중</span>
-        : status.state !== 'completed' && (status.failedStage === null || status.retryable) ? <Button icon={status.failedStage === null ? 'play' : 'retry'} variant="primary" onClick={() => void submit()}>{action}</Button>
+        : status.state !== 'completed' && (status.failedStage === null || status.retryable || restartOnly) ? <Button icon={status.failedStage === null ? 'play' : 'retry'} variant="primary" onClick={() => void submit()}>{action}</Button>
           : null}
     </div>
     {error && <p className="processing-error" role="alert">{error}</p>}

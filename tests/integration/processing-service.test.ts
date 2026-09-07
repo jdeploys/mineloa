@@ -361,6 +361,25 @@ describe('ProcessingService', () => {
     h.database.close()
   })
 
+  it('runs a nonretryable failure again from the audio once the user restarts it', async () => {
+    const h = harness({ policy: 'keep' })
+    h.meetings.beginTranscription('meeting-1')
+    h.meetings.failTranscription('meeting-1', { code: 'OPENAI_UNAUTHORIZED', message: 'OpenAI rejected the API key.', retryable: false })
+    await expect(h.service.retry('meeting-1')).rejects.toThrow('This processing stage cannot be retried')
+
+    await expect(h.service.restart('meeting-1')).resolves.toMatchObject({ state: 'completed', failedStage: null, error: null })
+    expect(h.transcribe).toHaveBeenCalledTimes(1)
+    expect(h.summarize).toHaveBeenCalledTimes(1)
+    h.database.close()
+  })
+
+  it('refuses to restart a meeting that has not failed', async () => {
+    const h = harness()
+    await expect(h.service.restart('meeting-1')).rejects.toThrow('Only a failed meeting can be processed again from the start')
+    expect(h.transcribe).not.toHaveBeenCalled()
+    h.database.close()
+  })
+
   it('isolates throwing progress observers so completed processing is never stranded', async () => {
     const h = harness({ policy: 'keep' })
     h.service.subscribe(() => { throw new Error('observer failed') })

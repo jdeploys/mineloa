@@ -92,6 +92,7 @@ const processing: DesktopApi['processing'] = Object.freeze({
   getStatus: (meetingId: string) => ipcRenderer.invoke('processing:get-status', meetingId),
   process: (meetingId: string) => ipcRenderer.invoke('processing:process', meetingId),
   retry: (meetingId: string) => ipcRenderer.invoke('processing:retry', meetingId),
+  restart: (meetingId: string) => ipcRenderer.invoke('processing:restart', meetingId),
   setAudioPolicy: (meetingId: string, audioPolicy: AudioPolicy) => ipcRenderer.invoke(
     'processing:set-audio-policy', MeetingIdSchema.parse(meetingId), AudioPolicySchema.parse(audioPolicy),
   ).then((value) => ProcessingStatusSchema.parse(value)),

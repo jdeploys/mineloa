@@ -40,7 +40,7 @@ function api(overrides: Partial<DesktopApi['meetings']> = {}): DesktopApi {
       start: vi.fn(), cancelStart: vi.fn(async () => undefined), appendChunk: vi.fn(), pause: vi.fn(),
       resume: vi.fn(), stop: vi.fn(), discard: vi.fn(),
     } as DesktopApi['recording'],
-    processing: { getStatus: vi.fn(async (meetingId) => ({ meetingId, state: 'completed', failedStage: null, retryable: false, audioRequired: false, error: null })), process: vi.fn(), retry: vi.fn(), onProgress: vi.fn(() => () => {}) },
+    processing: { getStatus: vi.fn(async (meetingId) => ({ meetingId, state: 'completed', failedStage: null, retryable: false, audioRequired: false, error: null })), process: vi.fn(), retry: vi.fn(), restart: vi.fn(), onProgress: vi.fn(() => () => {}) },
     archive: { exportMeeting: vi.fn(), exportMarkdown: vi.fn(), importMeeting: vi.fn(async () => ({ status: 'cancelled' as const })) },
   } as unknown as DesktopApi
 }

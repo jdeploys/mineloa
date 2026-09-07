@@ -37,7 +37,11 @@ export type ProcessingStatus = z.infer<typeof ProcessingStatusSchema>
 export interface ProcessingApi {
   getStatus(meetingId: string): Promise<ProcessingStatus>
   process(meetingId: string): Promise<ProcessingStatus>
+  // retry resumes the stage that failed; restart throws the finished stages
+  // away and runs the whole pipeline again from the saved audio, which is the
+  // only way forward once a failure cannot be retried as it stands.
   retry(meetingId: string): Promise<ProcessingStatus>
+  restart(meetingId: string): Promise<ProcessingStatus>
   setAudioPolicy(meetingId: string, audioPolicy: AudioPolicy): Promise<ProcessingStatus>
   onProgress(listener: (status: ProcessingStatus) => void): () => void
 }

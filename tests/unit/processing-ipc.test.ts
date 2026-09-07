@@ -18,7 +18,7 @@ function harness() {
   const progress = { meetingId: 'meeting-1', state: 'transcribing', failedStage: null, retryable: false, audioRequired: true, error: null }
   let observer!: (value: typeof progress) => void
   const service = {
-    process: vi.fn(), retry: vi.fn(),
+    process: vi.fn(), retry: vi.fn(), restart: vi.fn(),
     getStatus: vi.fn((meetingId: string) => ({ ...progress, meetingId, state: 'recorded' })),
     subscribe: vi.fn((listener) => { observer = listener; return () => undefined }),
   }
