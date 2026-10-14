@@ -10,6 +10,7 @@ import { createWebmAudioChunker, type AudioChunker, type AudioChunkSet } from '.
 import { WebmSplitError } from '../media/webmSplit'
 import { ownDurationsMs } from '../recording/recordingPartDurations'
 import { PROCESS_OWNER_ID } from './processingOwner'
+import type { TranscriptionProviderId } from '../../shared/contracts/settings'
 
 export interface TranscriptionResult {
   speakers: Speaker[]
@@ -83,7 +84,7 @@ export function collapseRepeatedSegments(
 export class TranscriptionService {
   constructor(
     private readonly meetings: MeetingRepository,
-    private readonly resolveProvider: () => Pick<TranscriptionProvider, 'transcribe' | 'maxAudioDurationSeconds'>,
+    private readonly resolveProvider: (providerId?: TranscriptionProviderId) => Pick<TranscriptionProvider, 'transcribe' | 'maxAudioDurationSeconds'>,
     private readonly recordingsDirectory: string,
     private readonly ownerId = PROCESS_OWNER_ID,
     private readonly chunker: AudioChunker = createWebmAudioChunker(tmpdir()),
@@ -96,6 +97,7 @@ export class TranscriptionService {
       attemptId: string
       ownerId: string
       onProgress?: (progress: TranscriptionProgress) => void
+      providerId?: TranscriptionProviderId
     },
   ): Promise<TranscriptionResult> {
     const ownAttempt = orchestration === undefined
@@ -115,7 +117,7 @@ export class TranscriptionService {
           throw new Error('Orchestrated transcription is not in the transcribing state')
         }
       }
-      const provider = this.resolveProvider()
+      const provider = this.resolveProvider(orchestration?.providerId)
       const parts = await this.finalizedParts(meetingId)
       const speakers = new Map<string, Speaker>()
       const segments: TranscriptSegment[] = []

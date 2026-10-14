@@ -10,10 +10,11 @@ import { openDatabase } from '../../src/main/db/database'
 import { MeetingRepository } from '../../src/main/db/meetingRepository'
 import { completedPartPath } from '../../src/main/recording/recordingPaths'
 import type { AudioPolicy, MeetingStatus } from '../../src/shared/contracts/meeting'
+import type { ProcessingProviderSettings } from '../../src/shared/contracts/settings'
 
 const roots: string[] = []
 
-function harness(options: { policy?: AudioPolicy; status?: MeetingStatus; failSummary?: boolean; failCleanup?: boolean } = {}) {
+function harness(options: { policy?: AudioPolicy; status?: MeetingStatus; failSummary?: boolean; failCleanup?: boolean; snapshotProviders?: () => ProcessingProviderSettings; preflightProviders?: (providers: ProcessingProviderSettings, stage: 'all' | 'summary') => Promise<void> } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'nnote-processing-'))
   roots.push(root)
   const recordings = join(root, 'recordings')
@@ -51,7 +52,7 @@ function harness(options: { policy?: AudioPolicy; status?: MeetingStatus; failSu
       if (cleanupFailures-- > 0) throw Object.assign(new Error('locked'), { code: 'EBUSY' })
       rmSync(path, { force: true })
     },
-  })
+  }, PROCESS_OWNER_ID, options.snapshotProviders, options.preflightProviders)
   return { database, meetings, service, transcribe, summarize, first, second }
 }
 
@@ -60,6 +61,39 @@ afterEach(() => {
 })
 
 describe('ProcessingService', () => {
+  it('keeps both selected provider IDs for an attempt when settings change after transcription', async () => {
+    let selected: ProcessingProviderSettings = {
+      transcriptionProvider: 'apple_speech', summaryProvider: 'apple_foundation', localWhisperModel: 'base',
+    }
+    const h = harness({ policy: 'keep', snapshotProviders: () => selected })
+    h.transcribe.mockImplementationOnce(async () => {
+      selected = { ...selected, summaryProvider: 'openai' }
+      return h.meetings.completeTranscription('meeting-1', [], [])
+    })
+    await h.service.process('meeting-1')
+    expect(h.transcribe).toHaveBeenCalledWith('meeting-1', expect.objectContaining({ providerId: 'apple_speech' }))
+    expect(h.summarize).toHaveBeenCalledWith('meeting-1', 'apple_foundation')
+    h.database.close()
+  })
+
+  it('checks both selected providers before invoking transcription', async () => {
+    const selected: ProcessingProviderSettings = {
+      transcriptionProvider: 'apple_speech', summaryProvider: 'apple_foundation', localWhisperModel: 'base',
+    }
+    const preflightProviders = vi.fn(async () => {
+      throw Object.assign(new Error('Apple Intelligence is not ready'), {
+        code: 'APPLE_SUMMARY_MODEL_NOT_READY', retryable: true,
+      })
+    })
+    const h = harness({ policy: 'keep', snapshotProviders: () => selected, preflightProviders })
+    await expect(h.service.process('meeting-1')).rejects.toThrow('Apple Intelligence is not ready')
+    expect(preflightProviders).toHaveBeenCalledWith(selected, 'all')
+    expect(h.transcribe).not.toHaveBeenCalled()
+    expect(h.summarize).not.toHaveBeenCalled()
+    expect(existsSync(h.first)).toBe(true)
+    h.database.close()
+  })
+
   it('deletes every finalized audio part only after transcript and summary commit', async () => {
     const h = harness()
     await h.service.process('meeting-1')
@@ -174,6 +208,28 @@ describe('ProcessingService', () => {
       error: {
         code: 'LOCAL_WHISPER_RUNTIME_UNAVAILABLE',
         message: 'Local Whisper runtime is unavailable.',
+        retryable: false,
+      },
+    })
+
+    expect(h.service.getStatus('meeting-1')).toMatchObject({
+      state: 'failed', failedStage: 'transcribing', retryable: true, audioRequired: true,
+    })
+    await h.service.retry('meeting-1')
+    expect(h.transcribe).toHaveBeenCalledOnce()
+    h.database.close()
+  })
+
+  it('retries saved local Whisper output failures after padded timestamps are supported', async () => {
+    const h = harness()
+    const attempt = h.meetings.beginProcessingAttempt('meeting-1', 'transcribing', PROCESS_OWNER_ID)
+    h.meetings.beginTranscription('meeting-1')
+    h.meetings.failProcessing('meeting-1')
+    h.meetings.finishProcessingAttempt(attempt.id, {
+      succeeded: false,
+      error: {
+        code: 'LOCAL_WHISPER_INVALID_OUTPUT',
+        message: 'Local Whisper returned an invalid transcription.',
         retryable: false,
       },
     })

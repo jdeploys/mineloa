@@ -1,3 +1,5 @@
+import { TutorialAttribution } from './TutorialAttribution'
+import { TUTORIAL_ATTRIBUTION, TUTORIAL_MEETING_ID } from '../../../../shared/tutorialMeeting'
 import { useEffect, useState, type Ref } from 'react'
 import type { ArchiveApi } from '../../../../shared/contracts/archive'
 import type { ProcessingApi, ProcessingStatus as ProcessingStatusValue } from '../../../../shared/contracts/processing'
@@ -29,6 +31,7 @@ function replaceSpeakerIds(value: string, speakers: readonly Speaker[]): string 
 
 function sectionBody(section: DocumentSummarySection | undefined, speakers: readonly Speaker[]) {
   if (!section) return <p className="muted">내용이 없습니다.</p>
+  if (section.kind === 'paragraph' && section.text.includes(TUTORIAL_ATTRIBUTION)) return <TutorialAttribution />
   if (section.kind === 'paragraph') return <p>{replaceSpeakerIds(section.text, speakers)}</p>
   return section.items.length === 0 ? <p className="muted">내용이 없습니다.</p> : <ul>{section.items.map((item, index) => {
     const at = summaryTimeLabel(item.atMs)
@@ -50,6 +53,7 @@ function markdown(document: MeetingDocument, speakers: readonly Speaker[]): stri
     }
     lines.push('')
   }
+  if (document.meeting.id === TUTORIAL_MEETING_ID) lines.push('## Sample source', TUTORIAL_ATTRIBUTION, '')
   lines.push('## 전체 대화 내용')
   for (const segment of document.transcript) lines.push(`- ${segment.speakerId === null ? '화자 미상' : names.get(segment.speakerId) ?? segment.speakerId}: ${segment.text}`)
   return lines.join('\n')
@@ -203,6 +207,7 @@ export function MeetingDetail({ document, onBack, onRenameMeeting, onRenameSpeak
 
   return <main className="page-container meeting-page">
     <PageHeader ref={headingRef} backLabel="전체 기록" onBack={onBack} title={title} description={formattedMeta} trailing={<StatusBadge label={meetingStatusLabel(document.meeting.status)} tone={meetingStatusTone(document.meeting.status)} icon={meetingStatusIcon(document.meeting.status)} iconOnly={document.meeting.status === 'completed'} />} />
+    {document.meeting.id === TUTORIAL_MEETING_ID ? <InlineNotice tone="info" title="샘플 회의">튜토리얼용 영어 회의입니다. 원본 음원과 수동 전사, 미리 작성한 요약을 살펴보세요. 출처와 라이선스는 아래 ‘예제 안내 및 출처’에서 확인할 수 있습니다.</InlineNotice> : null}
     {titleError === null ? null : <p className="meeting-title-error" role="alert">{titleError}</p>}
     <SurfaceCard className="meeting-overview" labelledBy="meeting-audio-title">
       <h2 id="meeting-audio-title">오디오 및 처리</h2>

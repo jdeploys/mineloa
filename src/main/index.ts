@@ -1,5 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol } from 'electron'
 import { join } from 'node:path'
+import { existsSync } from 'node:fs'
+import { seedTutorialMeeting } from './tutorial/seedTutorialMeeting'
 import { OpenAiKeyValidator } from './ai/openAiKeyValidator'
 import { OpenAiGateway, OpenAiSummaryGateway } from './ai/openAiGateway'
 import { TranscriptionService } from './ai/transcriptionService'
@@ -40,6 +42,10 @@ import { WhisperModelManager } from './localModels/whisperModelManager'
 import { publishWhisperProgressToLiveWindows } from './window/publishWhisperProgress'
 import { LocalWhisperTranscriptionAdapter } from './ai/providers/localWhisperTranscriptionAdapter'
 import { resolveLocalRuntimePaths } from './localRuntime/runtimePaths'
+import { resolveBundledFfmpegPath } from './localRuntime/runtimePaths'
+import { AppleHelper } from './ai/providers/appleHelper'
+import { AppleSpeechTranscriptionAdapter, AppleFoundationSummaryAdapter } from './ai/providers/appleAdapters'
+import { safeProviderError } from './ai/providers/providerErrors'
 import {
   legacyUserDataDirectory,
   shouldUseLegacyUserDataDirectory,
@@ -62,12 +68,14 @@ if (verificationRequest !== null) {
   startSingleInstanceApp(app, BrowserWindow, () => {
   app.whenReady().then(async () => {
     const userDataDirectory = app.getPath('userData')
-    const database = openDatabase(join(userDataDirectory, 'nnote.sqlite'))
+    const databasePath = join(userDataDirectory, 'nnote.sqlite')
+    const firstInstall = !existsSync(databasePath)
+    const database = openDatabase(databasePath)
     const recordingsDirectory = join(userDataDirectory, 'recordings')
     await bootstrapAfterImportRecovery({
       app, database, dialog, recordingsDirectory,
       reconcile: () => reconcileImportJournals(database, recordingsDirectory),
-      start: () => {
+      start: async () => {
         const meetings = new MeetingRepository(database)
         const credentialStore = new KeyringCredentialStore()
         const processingSettings = new ProcessingSettingsRepository(database, {
@@ -75,9 +83,31 @@ if (verificationRequest !== null) {
           localWhisperEnabled: !process.mas,
         })
         const whisperModels = new WhisperModelManager(join(userDataDirectory, 'models', 'whisper'))
+        const appleHelper = process.platform === 'darwin' ? new AppleHelper({
+          isPackaged: app.isPackaged,
+          resourcesPath: process.resourcesPath,
+          projectDirectory: app.getAppPath(),
+          platform: process.platform,
+          arch: process.arch,
+          runProcess: runOwnedProcess,
+        }) : null
+        if (appleHelper !== null) app.once('before-quit', () => appleHelper.dispose())
+        const appleSpeech = appleHelper === null ? null : new AppleSpeechTranscriptionAdapter({
+          helper: appleHelper,
+          recordingsRoot: recordingsDirectory,
+          temporaryRoot: app.getPath('temp'),
+          resolveFfmpeg: () => resolveBundledFfmpegPath({
+            isPackaged: app.isPackaged, resourcesPath: process.resourcesPath,
+            platform: process.platform, arch: process.arch,
+            developmentRuntimeDirectory: process.env.NNOTE_LOCAL_RUNTIME_DIR,
+            developmentProjectDirectory: app.getAppPath(),
+          }),
+          runProcess: runOwnedProcess,
+        })
         const registry = new ProviderRegistry(
           [
             new OpenAiTranscriptionAdapter(new OpenAiGateway(credentialStore)),
+            ...(appleSpeech === null ? [] : [appleSpeech]),
             ...(!process.mas ? [new LocalWhisperTranscriptionAdapter({
               resolveRuntimePaths: () => resolveLocalRuntimePaths({
                 isPackaged: app.isPackaged,
@@ -96,6 +126,7 @@ if (verificationRequest !== null) {
           ],
           [
             new OpenAiSummaryAdapter(new OpenAiSummaryGateway(credentialStore)),
+            ...(appleHelper === null ? [] : [new AppleFoundationSummaryAdapter(appleHelper)]),
             ...(!process.mas ? [
               new CodexCliSummaryAdapter(
                 runOwnedProcess,
@@ -113,11 +144,14 @@ if (verificationRequest !== null) {
           registry,
           whisperModels,
           (progress) => publishWhisperProgressToLiveWindows(BrowserWindow.getAllWindows(), progress),
+          undefined,
+          appleSpeech ?? undefined,
         )
         const recordingService = new RecordingService(meetings, recordingsDirectory)
         const templateRepository = new TemplateRepository(database)
         const templateService = new TemplateService(templateRepository)
         templateService.seedDefault()
+        await seedTutorialMeeting(database, recordingsDirectory, join(app.isPackaged ? process.resourcesPath : app.getAppPath(), 'resources/tutorial/meeting.webm'), firstInstall).catch((error: unknown) => console.warn('Tutorial sample initialization failed', error))
         registerTemplateHandlers(ipcMain, templateService)
         registerRecordingHandlers(ipcMain, recordingService)
         registerRecoveryHandlers(
@@ -129,7 +163,7 @@ if (verificationRequest !== null) {
           meetings,
           new TranscriptionService(
             meetings,
-            () => registry.transcription(processingSettings.get().transcriptionProvider),
+            (providerId) => registry.transcription(providerId ?? processingSettings.get().transcriptionProvider),
             recordingsDirectory,
             PROCESS_OWNER_ID,
             createWebmAudioChunker(app.getPath('temp')),
@@ -137,9 +171,24 @@ if (verificationRequest !== null) {
           new SummaryService(
             meetings,
             templateService,
-            () => registry.summary(processingSettings.get().summaryProvider),
+            (providerId) => registry.summary(providerId ?? processingSettings.get().summaryProvider),
           ),
           recordingsDirectory,
+          undefined,
+          PROCESS_OWNER_ID,
+          () => processingSettings.get(),
+          async (providers, stage) => {
+            const selected = stage === 'all'
+              ? [registry.transcription(providers.transcriptionProvider), registry.summary(providers.summaryProvider)]
+              : [registry.summary(providers.summaryProvider)]
+            for (const provider of selected) {
+              const availability = await provider.availability()
+              if (!availability.available) throw safeProviderError(
+                availability.code ?? 'PROVIDER_UNAVAILABLE',
+                availability.message ?? 'The selected processing provider is unavailable.', true,
+              )
+            }
+          },
         )
         registerProcessingHandlers(ipcMain, processingService)
         registerMeetingHandlers(ipcMain, meetings, templateService)

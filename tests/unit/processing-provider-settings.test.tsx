@@ -38,6 +38,7 @@ function settingsApi(overrides: Partial<SettingsApi> = {}): SettingsApi {
     getProcessingProviders: vi.fn(async () => defaults),
     updateProcessingProviders: vi.fn(async (input) => input),
     listProcessingProviderDescriptors: vi.fn(async () => descriptors),
+    prepareAppleSpeech: vi.fn(async () => ({ available: false, code: 'APPLE_HELPER_UNAVAILABLE', message: 'Unavailable' })),
     listWhisperModels: vi.fn(async () => [model('base', 'not_installed'), model('small', 'not_installed')]),
     downloadWhisperModel: vi.fn(async (id) => model(id, 'installed', id === 'base' ? 147_951_465 : 487_601_967)),
     deleteWhisperModel: vi.fn(async (id) => model(id, 'not_installed')),
@@ -57,8 +58,8 @@ function deferred<T>() {
 }
 
 async function expand() {
-  const localMode = await screen.findByRole('radio', { name: /로컬 설정/ })
-  if (!(localMode as HTMLInputElement).checked) await userEvent.setup().click(localMode)
+  const transcription = await screen.findByLabelText('음성 변환 방식')
+  if ((transcription as HTMLSelectElement).value !== 'local_whisper') await userEvent.setup().selectOptions(transcription, 'local_whisper')
   await screen.findByRole('region', { name: '로컬 설정' })
 }
 
@@ -67,12 +68,11 @@ describe('processing provider settings visible outcomes', () => {
 
   it('shows OpenAI as the default and hides local settings', async () => {
     render(<ProcessingProviderSettingsView settings={settingsApi()} />)
-    expect(await screen.findByRole('radio', { name: /OpenAI/ })).toBeChecked()
+    expect(await screen.findByLabelText('음성 변환 방식')).toHaveValue('openai')
+    expect(screen.getByLabelText('회의록 작성 방식')).toHaveValue('openai')
     expect(screen.getByRole('region', { name: 'OpenAI 설정' })).toBeVisible()
     expect(screen.getByLabelText('OpenAI API 키')).toBeVisible()
-    expect(screen.getByRole('radio', { name: /로컬 설정/ })).not.toBeChecked()
     expect(screen.queryByRole('region', { name: '로컬 설정' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('회의록 작성 방식')).not.toBeInTheDocument()
   })
 
   it('disables local settings and omits Codex CLI for the App Store provider set', async () => {
@@ -81,26 +81,24 @@ describe('processing provider settings visible outcomes', () => {
       listProcessingProviderDescriptors: vi.fn(async () => appStoreDescriptors),
     })} />)
 
-    expect(await screen.findByRole('radio', { name: /OpenAI/ })).toBeChecked()
-    expect(screen.getByRole('radio', { name: /로컬 설정/ })).toBeDisabled()
-    expect(screen.getByText('App Store 버전에서는 지원하지 않습니다.')).toBeVisible()
+    expect(await screen.findByLabelText('음성 변환 방식')).toHaveValue('openai')
+    expect(screen.queryByRole('option', { name: '로컬 Whisper' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: '로컬 설정' })).not.toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'Codex CLI' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Codex CLI 상태' })).not.toBeInTheDocument()
   })
 
-  it('selects the local processing bundle while preserving the model', async () => {
+  it('selects local transcription without changing the summary provider or model', async () => {
     const api = settingsApi()
     render(<ProcessingProviderSettingsView settings={api} />)
     await expand()
-    expect(api.updateProcessingProviders).toHaveBeenCalledWith({
-      transcriptionProvider: 'local_whisper', summaryProvider: 'codex_cli', localWhisperModel: 'base',
-    })
+    expect(api.updateProcessingProviders).toHaveBeenLastCalledWith({ transcriptionProvider: 'local_whisper', summaryProvider: 'openai', localWhisperModel: 'base' })
   })
 
   it('shows local-only audio privacy and missing speaker separation', async () => {
     render(<ProcessingProviderSettingsView settings={settingsApi()} />)
     await expand()
+    await userEvent.setup().selectOptions(screen.getByLabelText('회의록 작성 방식'), 'codex_cli')
     expect(screen.queryByRole('region', { name: 'OpenAI 설정' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('OpenAI API 키')).not.toBeInTheDocument()
     expect(await screen.findByRole('note', { name: '로컬 처리' })).toBeVisible()
@@ -168,8 +166,8 @@ describe('processing provider settings visible outcomes', () => {
     await userEvent.setup().click(await screen.findByRole('button', { name: 'base 모델 다운로드' }))
 
     expect(await screen.findByText('로컬 처리 구성 요소를 사용할 수 있습니다.')).toBeVisible()
-    expect(screen.getByRole('radio', { name: /로컬 설정/ })).toBeChecked()
-    expect(screen.getByLabelText('회의록 작성 방식')).toHaveValue('codex_cli')
+    expect(screen.getByLabelText('음성 변환 방식')).toHaveValue('local_whisper')
+    expect(screen.getByLabelText('회의록 작성 방식')).toHaveValue('openai')
     expect(screen.getByLabelText('로컬 모델')).toHaveValue('base')
     expect(listDescriptors).toHaveBeenCalledTimes(3)
   })
@@ -246,8 +244,7 @@ describe('processing provider settings visible outcomes', () => {
 
     expect(screen.getByRole('button', { name: 'Codex CLI 상태 확인 중…' })).toBeDisabled()
     expect(screen.getByRole('region', { name: 'Codex CLI 상태' })).toHaveAttribute('aria-busy', 'true')
-    expect(screen.getByRole('radio', { name: /OpenAI/ })).toBeDisabled()
-    expect(screen.getByRole('radio', { name: /로컬 설정/ })).toBeDisabled()
+    expect(screen.getByLabelText('음성 변환 방식')).toBeDisabled()
     expect(screen.getByLabelText('회의록 작성 방식')).toBeDisabled()
     await user.keyboard('{Enter}')
     expect(listDescriptors).toHaveBeenCalledTimes(3)
@@ -255,8 +252,7 @@ describe('processing provider settings visible outcomes', () => {
 
     await act(async () => refresh.resolve(descriptors))
     expect(await screen.findByText('Codex CLI가 설치되고 인증되어 사용할 수 있습니다.')).toBeVisible()
-    expect(screen.getByRole('radio', { name: /OpenAI/ })).toBeEnabled()
-    expect(screen.getByRole('radio', { name: /로컬 설정/ })).toBeEnabled()
+    expect(screen.getByLabelText('음성 변환 방식')).toBeEnabled()
     expect(screen.getByLabelText('회의록 작성 방식')).toBeEnabled()
     expect(screen.getByLabelText('회의록 작성 방식')).toHaveValue('codex_cli')
     expect(api.updateProcessingProviders).toHaveBeenCalledTimes(1)
@@ -288,8 +284,7 @@ describe('processing provider settings visible outcomes', () => {
     expect(document.body.textContent).not.toContain('C:/secret')
     expect(screen.getByRole('button', { name: 'Codex CLI 상태 다시 확인' })).toBeEnabled()
     expect(screen.getByRole('region', { name: 'Codex CLI 상태' })).toHaveAttribute('aria-busy', 'false')
-    expect(screen.getByRole('radio', { name: /OpenAI/ })).toBeEnabled()
-    expect(screen.getByRole('radio', { name: /로컬 설정/ })).toBeEnabled()
+    expect(screen.getByLabelText('음성 변환 방식')).toBeEnabled()
     expect(screen.getByLabelText('회의록 작성 방식')).toBeEnabled()
     expect(api.updateProcessingProviders).toHaveBeenCalledTimes(1)
   })
@@ -309,9 +304,8 @@ describe('processing provider settings visible outcomes', () => {
       listProcessingProviderDescriptors: listDescriptors,
     })
     render(<ProcessingProviderSettingsView settings={api} />)
-    await user.click(await screen.findByRole('radio', { name: /로컬 설정/ }))
-    expect(screen.getByRole('radio', { name: /OpenAI/ })).toBeDisabled()
-    expect(screen.getByRole('radio', { name: /로컬 설정/ })).toBeDisabled()
+    await user.selectOptions(await screen.findByLabelText('음성 변환 방식'), 'local_whisper')
+    expect(screen.getByLabelText('음성 변환 방식')).toBeDisabled()
     expect(listDescriptors).toHaveBeenCalledTimes(1)
 
     await act(async () => save.resolve(persisted))
@@ -362,7 +356,7 @@ describe('processing provider settings visible outcomes', () => {
 
     expect(await screen.findByText('Codex CLI가 설치되고 인증되어 사용할 수 있습니다.')).toBeVisible()
     expect(screen.queryByRole('region', { name: 'Codex CLI 문제 해결' })).not.toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /로컬 설정/ })).toBeChecked()
+    expect(screen.getByLabelText('음성 변환 방식')).toHaveValue('local_whisper')
     expect(screen.getByLabelText('회의록 작성 방식')).toHaveValue('codex_cli')
   })
 
@@ -377,7 +371,7 @@ describe('processing provider settings visible outcomes', () => {
 
   it('keeps local and Codex panels hidden while OpenAI is selected', async () => {
     render(<ProcessingProviderSettingsView settings={settingsApi()} />)
-    await waitFor(() => expect(screen.getByRole('radio', { name: /OpenAI/ })).toBeChecked())
+    await waitFor(() => expect(screen.getByLabelText('음성 변환 방식')).toHaveValue('openai'))
     expect(screen.queryByRole('region', { name: '로컬 설정' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('로컬 모델')).not.toBeInTheDocument()
     expect(screen.queryByText('대화 내용이 Codex 계정으로 전송됩니다.')).not.toBeInTheDocument()
@@ -388,5 +382,20 @@ describe('processing provider settings visible outcomes', () => {
     render(<ProcessingProviderSettingsView settings={api} />)
     expect(await screen.findByRole('alert')).toHaveTextContent('처리 설정을 불러오지 못했습니다. 잠시 후 다시 시도하세요.')
     expect(document.body.textContent).not.toContain('C:/secret')
+  })
+
+  it('keeps the API key and transcript transfer notice for Apple Speech with OpenAI summary', async () => {
+    const apple: ProcessingProviderDescriptor = {
+      id: 'apple_speech', stage: 'transcription', displayName: 'Apple 음성 전사',
+      availability: { available: false, code: 'APPLE_SPEECH_ASSET_NOT_READY', message: 'Prepare the Korean speech model.' },
+      privacy: 'local', capabilities: [],
+    }
+    const api = settingsApi({ listProcessingProviderDescriptors: vi.fn(async () => [...descriptors, apple]) })
+    render(<ProcessingProviderSettingsView settings={api} />)
+    await userEvent.setup().selectOptions(await screen.findByLabelText('음성 변환 방식'), 'apple_speech')
+    expect(screen.getByLabelText('회의록 작성 방식')).toHaveValue('openai')
+    expect(screen.getByLabelText('OpenAI API 키')).toBeVisible()
+    expect(screen.getByText('음성은 이 Mac에서 처리하고, 변환된 전사문은 OpenAI로 전송합니다.')).toBeVisible()
+    expect(screen.getByRole('button', { name: '한국어 음성 모델 준비' })).toBeVisible()
   })
 })

@@ -15,10 +15,13 @@ async function fixture() {
   const appOutDir = await realpath(await mkdtemp(join(tmpdir(), 'nnote-sign-order-')))
   roots.push(appOutDir)
   const runtime = join(appOutDir, 'Mineloa.app', 'Contents', 'Resources', 'local-runtime', 'darwin-arm64')
+  const apple = join(appOutDir, 'Mineloa.app', 'Contents', 'Resources', 'apple-processing')
   await mkdir(runtime, { recursive: true })
+  await mkdir(apple, { recursive: true })
   await Promise.all([
     writeFile(join(runtime, 'whisper-cli'), 'whisper-unsigned', { mode: 0o755 }),
     writeFile(join(runtime, 'ffmpeg'), 'ffmpeg-unsigned', { mode: 0o755 }),
+    writeFile(join(apple, 'apple-processing-helper'), 'apple-unsigned', { mode: 0o755 }),
     writeFile(join(runtime, 'THIRD_PARTY_NOTICES.md'), 'notices'),
     writeFile(join(runtime, 'LICENSE.whisper.cpp'), 'whisper license'),
     writeFile(join(runtime, 'LICENSE.FFmpeg'), 'ffmpeg license'),
@@ -33,6 +36,28 @@ const context = (appOutDir: string, codeSigningInfo?: { value: Promise<{ keychai
 })
 
 describe('macOS local runtime signing order', () => {
+  it('uses the packager-selected MAS development identity for nested helpers', async () => {
+    const target = await fixture()
+    const calls: string[][] = []
+    const findSigningIdentity = vi.fn(async () => ({ hash: 'DEVELOPMENT_IDENTITY_HASH' }))
+    const hook = createAfterPackHook({
+      run: (_command, args) => { calls.push(args); return { status: 0, error: undefined } },
+    })
+    await hook({
+      ...context(target.appOutDir, { value: Promise.resolve({ keychainFile: null }) }),
+      electronPlatformName: 'mas',
+      packager: {
+        appInfo: { productFilename: 'Mineloa' },
+        codeSigningInfo: { value: Promise.resolve({ keychainFile: null }) },
+        _activePackConfig: { type: 'development' },
+        helper: { findSigningIdentity },
+      },
+    })
+    expect(findSigningIdentity).toHaveBeenCalledWith(true, true, undefined, null, { type: 'development' })
+    expect(calls).toHaveLength(3)
+    for (const args of calls) expect(args).toContain('DEVELOPMENT_IDENTITY_HASH')
+  })
+
   it('signs bundled executables with inherited sandbox entitlements for MAS', async () => {
     const target = await fixture()
     const calls: string[][] = []
@@ -46,7 +71,7 @@ describe('macOS local runtime signing order', () => {
 
     await hook({ ...context(target.appOutDir, { value: Promise.resolve({}) }), electronPlatformName: 'mas' })
 
-    expect(calls).toHaveLength(2)
+    expect(calls).toHaveLength(3)
     for (const args of calls) {
       expect(args).toEqual(expect.arrayContaining([
         '--entitlements', 'build/entitlements.mas.inherit.plist',
@@ -57,7 +82,7 @@ describe('macOS local runtime signing order', () => {
     }
   })
 
-  it('signs both helpers before atomically refreshing hashes from final bytes', async () => {
+  it('signs all helpers before atomically refreshing hashes from final bytes', async () => {
     const target = await fixture()
     const order: string[] = []
     const calls: string[][] = []
@@ -72,7 +97,8 @@ describe('macOS local runtime signing order', () => {
       run: (_command, args) => {
         calls.push(args)
         const helper = args.at(-1)!
-        const name = helper.endsWith('whisper-cli') ? 'whisper-cli' : 'ffmpeg'
+        const name = helper.endsWith('whisper-cli') ? 'whisper-cli'
+          : helper.endsWith('ffmpeg') ? 'ffmpeg' : 'apple-processing-helper'
         order.push(`sign:${name}`)
         writeFileSync(helper, `${name}-signed-final`, { mode: 0o755 })
         return { status: 0, error: undefined }
@@ -87,7 +113,7 @@ describe('macOS local runtime signing order', () => {
 
     await hook(context(target.appOutDir, signingInfo))
 
-    expect(order).toEqual(['codeSigningInfo', 'sign:whisper-cli', 'sign:ffmpeg', 'manifest'])
+    expect(order).toEqual(['codeSigningInfo', 'sign:whisper-cli', 'sign:ffmpeg', 'sign:apple-processing-helper', 'manifest'])
     expect(signApplication).not.toHaveBeenCalled()
     for (const args of calls) {
       expect(args).toEqual(expect.arrayContaining([
@@ -128,7 +154,7 @@ describe('macOS local runtime signing order', () => {
     await hook(context(target.appOutDir, codeSigningInfo))
 
     expect(signingInfoReads).toBe(0)
-    expect(calls).toHaveLength(2)
+    expect(calls).toHaveLength(3)
     for (const args of calls) {
       expect(args).not.toContain('--keychain')
       expect(args).toEqual(expect.arrayContaining(['--sign', '-']))
@@ -142,6 +168,7 @@ describe('macOS local runtime signing order', () => {
     const ignore = signApplication.mock.calls[0][0].ignore as (path: string) => boolean
     expect(ignore(join(target.runtime, 'whisper-cli'))).toBe(true)
     expect(ignore(join(target.runtime, 'ffmpeg'))).toBe(true)
+    expect(ignore(join(target.appOutDir, 'Mineloa.app', 'Contents', 'Resources', 'apple-processing', 'apple-processing-helper'))).toBe(true)
     expect(ignore(join(target.appOutDir, 'Mineloa.app', 'Contents', 'Frameworks', 'Electron Framework.framework'))).toBe(false)
   })
 
@@ -164,11 +191,21 @@ describe('macOS local runtime signing order', () => {
   it('ad-hoc fallback seals only the app and never deep-signs helpers again', async () => {
     const target = await fixture()
     const run = vi.fn(() => ({ status: 0, error: undefined }))
-    const hook = createAfterSignHook({ run, signingConfigured: () => false })
+    const hook = createAfterSignHook({ run, signingConfigured: () => false, existingSignatureValid: () => false })
     await hook(context(target.appOutDir))
     expect(run).toHaveBeenCalledWith('codesign', [
       '--force', '--sign', '-', join(target.appOutDir, 'Mineloa.app'),
     ])
     expect(run.mock.calls.flat().join(' ')).not.toContain('--deep')
+  })
+
+  it('preserves an automatically discovered Developer ID signature', async () => {
+    const target = await fixture()
+    const run = vi.fn(() => ({ status: 0, error: undefined }))
+    const hook = createAfterSignHook({ run, signingConfigured: () => false, existingSignatureValid: () => true })
+
+    await hook(context(target.appOutDir))
+
+    expect(run).not.toHaveBeenCalled()
   })
 })

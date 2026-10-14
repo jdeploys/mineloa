@@ -1,6 +1,7 @@
 import type { MeetingRepository } from '../db/meetingRepository'
 import type { TemplateService } from '../templates/templateService'
 import type { SummaryProvider } from './providers/providerPorts'
+import type { SummaryProviderId } from '../../shared/contracts/settings'
 import { safeProviderError } from './providers/providerErrors'
 import { buildSummaryJsonSchema, createSummaryResponseSchema } from './summarySchema'
 
@@ -25,10 +26,10 @@ export class SummaryService {
   constructor(
     private readonly meetings: MeetingRepository,
     private readonly templates: TemplateService,
-    private readonly resolveProvider: () => Pick<SummaryProvider, 'summarize'>,
+    private readonly resolveProvider: (providerId?: SummaryProviderId) => Pick<SummaryProvider, 'summarize'>,
   ) {}
 
-  async summarizeMeeting(meetingId: string) {
+  async summarizeMeeting(meetingId: string, providerId?: SummaryProviderId) {
     const meeting = this.meetings.requireById(meetingId)
     if (meeting.selectedTemplateId === null) throw new Error('Meeting has no summary template')
     const template = this.templates.get(meeting.selectedTemplateId)
@@ -47,10 +48,15 @@ export class SummaryService {
       '전사:',
       ...transcript.map((segment, index) => `#${index} [${segment.speakerId ?? 'unknown'}] ${segment.text}`),
     ].join('\n')
-    const provider = this.resolveProvider()
+    const provider = this.resolveProvider(providerId)
     const raw = await provider.summarize({
       input,
       schema: buildSummaryJsonSchema(template, knownSpeakerIds),
+      context: {
+        sections: template.sections.map(({ id, title, kind, prompt }) => ({ id, title, kind, prompt })),
+        transcript: transcript.map(({ speakerId, text }, sourceIndex) => ({ sourceIndex, speakerId, text })),
+        speakerIds: knownSpeakerIds,
+      },
     })
     let json: unknown
     try {

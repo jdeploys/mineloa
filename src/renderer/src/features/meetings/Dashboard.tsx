@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { MeetingSearchInput, PublicMeeting } from '../../../../shared/contracts/meetingsApi'
 import type { TemplatesApi } from '../../../../shared/contracts/template'
 import { EmptyState } from '../../components/feedback/EmptyState'
@@ -20,6 +20,8 @@ interface DashboardProps {
   templates?: TemplatesApi
   onImport?(): void
 }
+
+const MEETINGS_PER_PAGE = 10
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(value))
@@ -62,8 +64,19 @@ export function Dashboard({ meetings, recordingControls, recordingStartRequest, 
   const [searchResults, setSearchResults] = useState<PublicMeeting[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
   const searchRequest = useRef(0)
   const visibleMeetings = searchResults ?? meetings
+  const totalPages = Math.max(1, Math.ceil(visibleMeetings.length / MEETINGS_PER_PAGE))
+  const currentPage = Math.min(page, totalPages)
+  const pageMeetings = visibleMeetings.slice(
+    (currentPage - 1) * MEETINGS_PER_PAGE,
+    currentPage * MEETINGS_PER_PAGE,
+  )
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
 
   async function runSearch(nextQuery: string, nextFromDate: string, nextToDate: string) {
     if (onSearch === undefined) return
@@ -78,6 +91,7 @@ export function Dashboard({ meetings, recordingControls, recordingStartRequest, 
       setSearchResults(null)
       setSearchError(null)
       setSearching(false)
+      setPage(1)
       return
     }
     const requestId = ++searchRequest.current
@@ -89,7 +103,10 @@ export function Dashboard({ meetings, recordingControls, recordingStartRequest, 
         from: nextFromDate === '' ? null : localDayStart(nextFromDate),
         toExclusive: nextToDate === '' ? null : localDayEndExclusive(nextToDate),
       })
-      if (requestId === searchRequest.current) setSearchResults(results)
+      if (requestId === searchRequest.current) {
+        setSearchResults(results)
+        setPage(1)
+      }
     } catch {
       if (requestId === searchRequest.current) setSearchError('기록을 검색하지 못했습니다. 다시 시도해 주세요.')
     } finally {
@@ -119,6 +136,7 @@ export function Dashboard({ meetings, recordingControls, recordingStartRequest, 
     setToDate('')
     setSearchResults(null)
     setSearchError(null)
+    setPage(1)
   }
 
   return <main className="dashboard page-container">
@@ -174,7 +192,7 @@ export function Dashboard({ meetings, recordingControls, recordingStartRequest, 
           description={searchResults === null ? '첫 회의를 녹음하면 여기에 안전하게 모입니다.' : '다른 키워드나 날짜로 다시 검색해 보세요.'}
         /> :
           <ul className="meeting-list">
-            {visibleMeetings.map((meeting) => <li key={meeting.id}>
+            {pageMeetings.map((meeting) => <li key={meeting.id}>
               <button className="meeting-row" data-focus-key={`meeting-${meeting.id}`} type="button" onClick={() => onOpenMeeting(meeting.id)}>
                 <span className="meeting-copy">
                   <strong>{meeting.title}</strong>
@@ -187,6 +205,12 @@ export function Dashboard({ meetings, recordingControls, recordingStartRequest, 
               </button>
             </li>)}
           </ul>}
+        {visibleMeetings.length <= MEETINGS_PER_PAGE ? null :
+          <nav className="meeting-pagination" aria-label="최근 기록 페이지">
+            <Button type="button" variant="tertiary" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>이전</Button>
+            <span className="meeting-page-status" role="status" aria-live="polite"><strong>{currentPage}</strong> / {totalPages} 페이지</span>
+            <Button type="button" variant="tertiary" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>다음</Button>
+          </nav>}
       </SurfaceCard>
     </main>
 }

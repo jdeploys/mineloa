@@ -2,6 +2,7 @@ import type {
   SummaryProviderId,
   TranscriptionProviderId,
 } from '../../../shared/contracts/settings'
+import type { TemplateSectionKind } from '../../../shared/contracts/template'
 
 export interface ProviderAvailability {
   available: boolean
@@ -38,6 +39,11 @@ export interface NormalizedTranscription {
 export interface SummaryRequest {
   input: string
   schema: { [key: string]: unknown }
+  context?: {
+    sections: Array<{ id: string; title: string; kind: TemplateSectionKind; prompt: string }>
+    transcript: Array<{ sourceIndex: number; speakerId: string | null; text: string }>
+    speakerIds: string[]
+  }
 }
 
 export interface TranscriptionProvider {

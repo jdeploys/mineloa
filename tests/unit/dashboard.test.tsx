@@ -70,6 +70,32 @@ describe('balanced meeting dashboard', () => {
     expect(controls.discard).not.toHaveBeenCalled()
   })
 
+  it('paginates recent meetings ten at a time', async () => {
+    const user = userEvent.setup()
+    const meetings = Array.from({ length: 12 }, (_, index) =>
+      meeting(`meeting-${index + 1}`, `회의 ${index + 1}`, 'completed'))
+    render(<Dashboard
+      meetings={meetings}
+      recordingControls={{ start: vi.fn(), stop: vi.fn(), discard: vi.fn() }}
+      onOpenMeeting={vi.fn()}
+      onNavigate={vi.fn()}
+    />)
+
+    expect(screen.getByText('회의 1')).toBeVisible()
+    expect(screen.getByText('회의 10')).toBeVisible()
+    expect(screen.queryByText('회의 11')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '이전' })).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('1 / 2 페이지')
+
+    await user.click(screen.getByRole('button', { name: '다음' }))
+
+    expect(screen.queryByText('회의 1')).not.toBeInTheDocument()
+    expect(screen.getByText('회의 11')).toBeVisible()
+    expect(screen.getByText('회의 12')).toBeVisible()
+    expect(screen.getByRole('button', { name: '다음' })).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('2 / 2 페이지')
+  })
+
   it.each([
     ['idle dashboard', [], '최근 기록이 없습니다.'],
     ['failed processing', [meeting('failed', '실패한 회의', 'failed')], '회의록 생성 실패'],

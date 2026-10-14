@@ -28,6 +28,7 @@ if ! security find-identity -v -p codesigning | grep -Fq "$identity"; then
 fi
 
 bash ./scripts/build-local-runtime.sh "$arch"
+bash ./scripts/build-apple-processing.sh "$arch"
 npm run build
 
 CSC_NAME=- CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder \

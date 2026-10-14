@@ -19,6 +19,7 @@ import { ArchiveOperationResultSchema } from '../shared/contracts/archive'
 import {
   ProcessingProviderSettingsSchema,
   ProviderDescriptorSchema,
+  ProviderAvailabilitySchema,
   WhisperModelIdSchema,
   WhisperModelProgressSchema,
   WhisperModelStatusSchema,
@@ -40,6 +41,8 @@ const settings: DesktopApi['settings'] = Object.freeze({
   listProcessingProviderDescriptors: () => ipcRenderer.invoke(
     'settings:list-processing-provider-descriptors',
   ).then((value) => ProviderDescriptorSchema.array().parse(value)),
+  prepareAppleSpeech: () => ipcRenderer.invoke('settings:prepare-apple-speech')
+    .then((value) => ProviderAvailabilitySchema.parse(value)),
   listWhisperModels: () => ipcRenderer.invoke('settings:list-whisper-models')
     .then((value) => WhisperModelStatusSchema.array().parse(value)),
   downloadWhisperModel: async (modelId: WhisperModelId) => ipcRenderer.invoke(

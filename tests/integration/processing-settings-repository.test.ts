@@ -143,6 +143,22 @@ describe('processing settings repository', () => {
     database.close()
   })
 
+  it('preserves Apple selections when MAS disables Whisper and Codex', () => {
+    const database = openDatabase(temporaryDatabasePath())
+    const settings = new ProcessingSettingsRepository(database, {
+      codexCliEnabled: false,
+      localWhisperEnabled: false,
+    })
+    const selected = {
+      transcriptionProvider: 'apple_speech' as const,
+      summaryProvider: 'apple_foundation' as const,
+      localWhisperModel: 'base' as const,
+    }
+    expect(settings.update(selected)).toEqual(selected)
+    expect(settings.get()).toEqual(selected)
+    database.close()
+  })
+
   it('validates processing provider settings at the IPC boundary', async () => {
     const database = openDatabase(temporaryDatabasePath())
     const settings = new ProcessingSettingsRepository(database)

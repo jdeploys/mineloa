@@ -13,7 +13,7 @@ import { WhisperModelSettings } from './WhisperModelSettings'
 
 const loadError = '처리 설정을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
 const updateError = '처리 설정을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
-type ProviderOperation = 'persist' | 'codex_refresh'
+type ProviderOperation = 'persist' | 'codex_refresh' | 'apple_prepare'
 
 export function ProcessingProviderSettings({ settings }: { settings: SettingsApi }) {
   const [value, setValue] = useState<ProcessingSettings | null>(null)
@@ -82,6 +82,15 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
   }
 
   const refreshCodexStatus = () => runOperation('codex_refresh', refreshDescriptors)
+  const prepareAppleSpeech = () => runOperation('apple_prepare', async () => {
+    setError(null)
+    try {
+      await settings.prepareAppleSpeech()
+      await refreshDescriptors()
+    } catch {
+      setError('한국어 음성 모델을 준비하지 못했습니다. 잠시 후 다시 시도하세요.')
+    }
+  })
 
   if (value === null) return <section className="processing-settings" aria-label="처리 방식 설정">
     <div className="settings-heading"><div><p className="eyebrow">PROCESSING</p><h2><Icon name="model" />처리 방식</h2></div></div>
@@ -92,39 +101,36 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
   const summary = descriptors.find((item) => item.stage === 'summary' && item.id === value.summaryProvider)
   const modelManager = transcription?.capabilities.includes('model_manager') === true
   const cliStatus = summary?.capabilities.includes('cli_status') === true
-  const localWhisperEnabled = descriptors.some((item) => item.stage === 'transcription' && item.id === 'local_whisper')
-  const mode = value.transcriptionProvider === 'local_whisper' ? 'local' : 'openai'
-  const chooseMode = (nextMode: 'openai' | 'local') => {
-    if (nextMode === mode) return
-    const localSummary = descriptors.some((item) => item.stage === 'summary' && item.id === 'codex_cli')
-      ? 'codex_cli'
-      : value.summaryProvider
-    void persist({
-      ...value,
-      transcriptionProvider: nextMode === 'openai' ? 'openai' : 'local_whisper',
-      summaryProvider: nextMode === 'openai' ? 'openai' : localSummary,
-    })
-  }
+  const usesOpenAi = value.transcriptionProvider === 'openai' || value.summaryProvider === 'openai'
 
   return <section className="processing-settings" aria-label="처리 방식 설정">
     <div className="settings-heading"><div><p className="eyebrow">PROCESSING</p><h2><Icon name="model" />처리 방식</h2></div></div>
-    <div className="processing-mode-options" role="radiogroup" aria-label="처리 방식">
-      <label>
-        <input type="radio" name="processing-mode" value="openai" checked={mode === 'openai'} disabled={busy} onChange={() => chooseMode('openai')} />
-        <span><strong>OpenAI</strong><small>API 키로 음성 변환과 회의록 작성을 처리합니다.</small></span>
+    <FieldHelp>변경 사항은 앞으로 시작하거나 다시 시도하는 처리에만 적용되며, 기존 결과는 다시 작성하지 않습니다.</FieldHelp>
+    <div className="provider-grid">
+      <label>음성 변환 방식
+        <select value={value.transcriptionProvider} disabled={busy} onChange={(event) => void persist({ ...value, transcriptionProvider: event.target.value as ProcessingSettings['transcriptionProvider'] })}>
+          {descriptors.filter((item) => item.stage === 'transcription').map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}
+        </select>
       </label>
-      <label data-unavailable={!localWhisperEnabled || undefined}>
-        <input type="radio" name="processing-mode" value="local" checked={mode === 'local'} disabled={busy || !localWhisperEnabled} onChange={() => chooseMode('local')} />
-        <span><strong>로컬 설정</strong><small>{localWhisperEnabled ? '이 Mac의 Whisper 모델로 음성을 변환합니다.' : 'App Store 버전에서는 지원하지 않습니다.'}</small></span>
+      <label>회의록 작성 방식
+        <select value={value.summaryProvider} disabled={busy} onChange={(event) => void persist({ ...value, summaryProvider: event.target.value as ProcessingSettings['summaryProvider'] })}>
+          {descriptors.filter((item) => item.stage === 'summary').map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}
+        </select>
       </label>
     </div>
-    {mode === 'openai' && <div className="openai-settings" role="region" aria-label="OpenAI 설정">
+    {transcription?.id === 'apple_speech' && transcription.availability.available === false && <p role="status" className="settings-meta">{transcription.availability.message}</p>}
+    {summary?.id === 'apple_foundation' && summary.availability.available === false && <p role="status" className="settings-meta">{summary.availability.message}</p>}
+    {value.transcriptionProvider === 'apple_speech' && <FieldHelp>Apple 음성 전사는 화자를 자동 구분하지 않습니다. 한국어 음성 모델을 준비한 뒤 상태를 다시 확인하세요. 모델 준비에는 인터넷이 필요할 수 있습니다.</FieldHelp>}
+    {value.transcriptionProvider === 'apple_speech' && <button type="button" disabled={busy} onClick={() => void prepareAppleSpeech()}>{pendingOperation === 'apple_prepare' ? '준비 중…' : '한국어 음성 모델 준비'}</button>}
+    {value.summaryProvider === 'apple_foundation' && <FieldHelp>Apple Intelligence가 켜져 있고 기기 모델이 준비되어 있어야 합니다. 시스템 설정에서 상태를 확인하세요.</FieldHelp>}
+    {(value.transcriptionProvider === 'apple_speech' || value.summaryProvider === 'apple_foundation') && <button type="button" disabled={busy} onClick={() => void refreshDescriptors()}>상태 다시 확인</button>}
+    {usesOpenAi && <div className="openai-settings" role="region" aria-label="OpenAI 설정">
       <div className="local-settings-heading">
         <span><span className="eyebrow">OPENAI</span><strong><Icon name="key" />OpenAI 설정</strong></span>
       </div>
       <ApiKeySettings settings={settings} embedded />
     </div>}
-    {mode === 'local' && <div className="local-settings" role="region" aria-label="로컬 설정">
+    {(modelManager || cliStatus || (value.transcriptionProvider !== 'openai' && value.summaryProvider === 'openai')) && <div className="local-settings" role="region" aria-label="로컬 설정">
       <div className="local-settings-heading">
         <span><span className="eyebrow">LOCAL</span><strong><Icon name="model" />로컬 설정</strong></span>
         <span className="advanced-summary">{transcription?.displayName ?? value.transcriptionProvider} · {summary?.displayName ?? value.summaryProvider}</span>
@@ -132,11 +138,6 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
       <div className="local-settings-content">
         <FieldHelp>변경 사항은 앞으로 시작하거나 다시 시도하는 처리에만 적용되며, 기존 결과는 다시 작성하지 않습니다.</FieldHelp>
         <div className="provider-grid">
-          <label>회의록 작성 방식
-            <select value={value.summaryProvider} disabled={busy} onChange={(event) => void persist({ ...value, summaryProvider: event.target.value as ProcessingSettings['summaryProvider'] })}>
-              {descriptors.filter((item) => item.stage === 'summary').map((item) => <option key={`${item.stage}-${item.id}`} value={item.id}>{item.displayName}</option>)}
-            </select>
-          </label>
           {modelManager && <label>로컬 모델
             <select value={value.localWhisperModel} disabled={busy} onChange={(event) => void persist({ ...value, localWhisperModel: event.target.value as ProcessingSettings['localWhisperModel'] })}>
               <option value="base">base · 빠르고 가벼움</option>
@@ -144,7 +145,7 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
             </select>
           </label>}
         </div>
-        {summary?.id === 'openai' && <PrivacyNotice title="OpenAI 요약"><p>음성은 이 Mac에서 변환하고, 변환된 대화 내용만 OpenAI로 전송합니다.</p></PrivacyNotice>}
+        {summary?.id === 'openai' && transcription?.privacy === 'local' && <PrivacyNotice title="OpenAI 요약"><p>음성은 이 Mac에서 처리하고, 변환된 전사문은 OpenAI로 전송합니다.</p></PrivacyNotice>}
         {modelManager && transcription !== undefined && <WhisperModelSettings settings={settings} modelId={value.localWhisperModel} descriptor={transcription} onAvailabilityChanged={refreshDescriptors} />}
         {cliStatus && summary !== undefined && <CodexCliStatus descriptor={summary} pending={pendingOperation === 'codex_refresh'} disabled={busy} onAvailabilityChanged={refreshCodexStatus} />}
       </div>

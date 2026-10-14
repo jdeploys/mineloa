@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs'
+import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { writeRuntimeManifest } from './write-local-runtime-manifest.mjs'
@@ -60,12 +60,24 @@ async function resolveKeychainFile(context, identity) {
 export function createAfterPackHook(dependencies = {}) {
   const run = dependencies.run ?? defaultRun
   const refreshManifest = dependencies.writeManifest ?? writeRuntimeManifest
-  const resolveIdentity = dependencies.identity ?? (() => (
-    process.env.MAS_APP_SIGNING_IDENTITY?.trim()
+  const resolveIdentity = dependencies.identity ?? (async (context, masBuild) => {
+    const explicit = process.env.MAS_APP_SIGNING_IDENTITY?.trim()
       || process.env.MAC_APP_SIGNING_IDENTITY?.trim()
       || process.env.CSC_NAME?.trim()
-      || '-'
-  ))
+    if (explicit) return explicit
+    const packager = context.packager
+    const config = packager._activePackConfig ?? packager.platformSpecificBuildOptions
+    if (config && packager.helper?.findSigningIdentity) {
+      const signingInfo = await packager.codeSigningInfo?.value
+      const chosen = await packager.helper.findSigningIdentity(
+        masBuild, config.type === 'development', config.identity,
+        signingInfo?.keychainFile ?? null, config,
+      )
+      if (chosen?.hash || chosen?.name) return chosen.hash || chosen.name
+    }
+    if (masBuild) throw new Error('Nested helper signing failed: identity')
+    return '-'
+  })
   const signApplication = dependencies.signApplication ?? signAsync
   return async function signLocalRuntimeHelpers(context) {
     if (!['darwin', 'mas'].includes(context.electronPlatformName)) return
@@ -82,13 +94,19 @@ export function createAfterPackHook(dependencies = {}) {
       join(targetRoot, 'whisper-cli'),
       join(targetRoot, 'ffmpeg'),
     ])
-    const identity = resolveIdentity()
+    const appleHelper = join(app, 'Contents', 'Resources', 'apple-processing', 'apple-processing-helper')
+    if (!statSync(appleHelper).isFile()) {
+      throw new Error('Nested helper signing failed: Apple helper')
+    }
+    helperPaths.add(appleHelper)
+    const identity = await resolveIdentity(context, masBuild)
     if (typeof identity !== 'string' || identity.trim() === '') {
       throw new Error('Nested helper signing failed: identity')
     }
     const keychainFile = await resolveKeychainFile(context, identity)
     runCodesign(run, identity, join(targetRoot, 'whisper-cli'), keychainFile, masBuild)
     runCodesign(run, identity, join(targetRoot, 'ffmpeg'), keychainFile, masBuild)
+    runCodesign(run, identity, appleHelper, keychainFile, masBuild)
     await refreshManifest({
       directory: targetRoot,
       platform: 'darwin',

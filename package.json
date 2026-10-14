@@ -21,15 +21,15 @@
     "test:release": "npm run lint && npm run typecheck && npm run rebuild:node && npm run test:unit && npm run test:integration && npm run build && npm run test:e2e && npm run test:visual",
     "lint": "eslint . --max-warnings=0",
     "package:win": "npm run build && npm run rebuild:electron && electron-builder --win --publish never",
-    "package:mac": "npm run build && npm run rebuild:electron && electron-builder --mac --publish never",
+    "package:mac": "npm run build && bash scripts/build-apple-processing.sh arm64 && bash scripts/build-apple-processing.sh x64 && npm run rebuild:electron && electron-builder --mac --publish never",
     "package:win:x64": "npm run build && electron-builder --win nsis dir --x64 --publish never",
-    "package:mac:x64": "npm run build && electron-builder --mac dmg dir --x64 --publish never",
-    "package:mac:arm64": "npm run build && electron-builder --mac dmg dir --arm64 --publish never",
+    "package:mac:x64": "npm run build && bash scripts/build-apple-processing.sh x64 && npm run rebuild:electron && electron-builder --mac dmg dir --x64 --publish never",
+    "package:mac:arm64": "npm run build && bash scripts/build-apple-processing.sh arm64 && npm run rebuild:electron && electron-builder --mac dmg dir --arm64 --publish never",
     "release:mac": "bash scripts/release-mac.sh",
     "package:mac:local": "bash scripts/package-mac-local.sh",
     "install:mac:local": "bash scripts/package-mac-local.sh --install",
-    "package:mas:arm64": "npm run build && npm run rebuild:electron && MAS_BUILD=true electron-builder --mac mas --arm64 --publish never",
-    "package:mas-dev:arm64": "npm run build && npm run rebuild:electron && MAS_BUILD=true electron-builder --mac mas-dev --arm64 --publish never",
+    "package:mas:arm64": "npm run build && bash scripts/build-apple-processing.sh arm64 && npm run rebuild:electron && MAS_BUILD=true electron-builder --mac mas --arm64 --publish never",
+    "package:mas-dev:arm64": "npm run build && bash scripts/build-apple-processing.sh arm64 && npm run rebuild:electron && MAS_BUILD=true electron-builder --mac mas-dev --arm64 --publish never",
     "docs:app-store-screenshots": "playwright test -c playwright.appstore.config.ts",
     "verify:win": "node scripts/verify-package.mjs dist/win-unpacked"
   },
@@ -38,6 +38,7 @@
     "productName": "Mineloa",
     "npmRebuild": true,
     "asar": true,
+    "extraResources": [{ "from": "resources/tutorial", "to": "resources/tutorial" }],
     "afterPack": "scripts/after-pack.mjs",
     "afterSign": "scripts/after-sign.mjs",
     "asarUnpack": [
@@ -87,12 +88,17 @@
       "icon": "build/icons/icon.icns",
       "signIgnore": [
         "/Contents/Resources/local-runtime/darwin-(?:x64|arm64)/whisper-cli$",
-        "/Contents/Resources/local-runtime/darwin-(?:x64|arm64)/ffmpeg$"
+        "/Contents/Resources/local-runtime/darwin-(?:x64|arm64)/ffmpeg$",
+        "/Contents/Resources/apple-processing/apple-processing-helper$"
       ],
       "extraResources": [
         {
           "from": "build/local-runtime/darwin-${arch}",
           "to": "local-runtime/darwin-${arch}"
+        },
+        {
+          "from": "build/apple-processing/${arch}",
+          "to": "apple-processing"
         }
       ],
       "target": [

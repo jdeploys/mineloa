@@ -16,6 +16,7 @@ const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
 const binaries = [
   join(runtime, `darwin-${arch}`, 'whisper-cli'),
   join(runtime, `darwin-${arch}`, 'ffmpeg'),
+  join(app, 'Contents', 'Resources', 'apple-processing', 'apple-processing-helper'),
 ]
 
 await Promise.all([access(app), ...binaries.map((binary) => access(binary))])

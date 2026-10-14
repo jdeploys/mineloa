@@ -5,8 +5,8 @@ export interface ApiKeyStatus {
   lastValidatedAt: string | null
 }
 
-export const TranscriptionProviderIdSchema = z.enum(['openai', 'local_whisper'])
-export const SummaryProviderIdSchema = z.enum(['openai', 'codex_cli'])
+export const TranscriptionProviderIdSchema = z.enum(['openai', 'local_whisper', 'apple_speech'])
+export const SummaryProviderIdSchema = z.enum(['openai', 'codex_cli', 'apple_foundation'])
 export const WhisperModelIdSchema = z.enum(['base', 'small'])
 export type TranscriptionProviderId = z.infer<typeof TranscriptionProviderIdSchema>
 export type SummaryProviderId = z.infer<typeof SummaryProviderIdSchema>
@@ -75,6 +75,7 @@ export interface SettingsApi {
   getProcessingProviders(): Promise<ProcessingProviderSettings>
   updateProcessingProviders(input: ProcessingProviderSettings): Promise<ProcessingProviderSettings>
   listProcessingProviderDescriptors(): Promise<ProcessingProviderDescriptor[]>
+  prepareAppleSpeech(): Promise<z.infer<typeof ProviderAvailabilitySchema>>
   listWhisperModels(): Promise<WhisperModelStatus[]>
   downloadWhisperModel(modelId: WhisperModelId): Promise<WhisperModelStatus>
   deleteWhisperModel(modelId: WhisperModelId): Promise<WhisperModelStatus>

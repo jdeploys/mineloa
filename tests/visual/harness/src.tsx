@@ -76,6 +76,7 @@ const providerDescriptors = [
 const baseBytes = 147_951_465
 let descriptorLoadCount = 0
 const settings = {
+  prepareAppleSpeech: async () => ({ available: false, code: 'APPLE_HELPER_UNAVAILABLE', message: 'Unavailable' }),
   getApiKeyStatus: async () => ({ configured: true, lastValidatedAt: '2026-07-14T08:30:00.000Z' }),
   saveApiKey: async () => {},
   deleteApiKey: async () => {},

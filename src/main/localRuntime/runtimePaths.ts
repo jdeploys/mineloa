@@ -63,3 +63,25 @@ export async function resolveLocalRuntimePaths(options: LocalRuntimePathOptions)
     throw unavailable()
   }
 }
+
+/** Apple Speech only needs the bundled converter, not the Whisper executable. */
+export async function resolveBundledFfmpegPath(options: LocalRuntimePathOptions): Promise<string> {
+  try {
+    const target = `${options.platform}-${options.arch}`
+    if (!['darwin-x64', 'darwin-arm64'].includes(target)) throw unavailable()
+    const requestedRoot = options.isPackaged
+      ? join(options.resourcesPath, 'local-runtime', target)
+      : options.developmentRuntimeDirectory
+        ?? (options.developmentProjectDirectory === undefined
+          ? undefined
+          : join(options.developmentProjectDirectory, 'build', 'local-runtime', target))
+    if (requestedRoot === undefined || !isAbsolute(requestedRoot)) throw unavailable()
+    const details = await lstat(requestedRoot)
+    if (!details.isDirectory() || details.isSymbolicLink()) throw unavailable()
+    const ownedRoot = await realpath(requestedRoot)
+    if (ownedRoot !== resolve(requestedRoot)) throw unavailable()
+    return verifiedExecutable(ownedRoot, 'ffmpeg')
+  } catch {
+    throw safeProviderError('APPLE_SPEECH_AUDIO_CONVERTER_UNAVAILABLE', 'The bundled audio converter is unavailable.', true)
+  }
+}

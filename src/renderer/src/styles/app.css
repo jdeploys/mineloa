@@ -110,9 +110,14 @@
 .meeting-copy { display: grid; gap: 4px; min-width: 0; }
 .meeting-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 14px; font-weight: 500; }
 .meeting-copy > span { color: var(--ink-tertiary); font-size: 12px; }
+.meeting-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; padding-top: 18px; }
+.meeting-pagination > .ui-button { min-height: 36px; padding: 7px 10px; }
+.meeting-page-status { min-width: 72px; color: var(--ink-tertiary); font-size: var(--type-size-caption-sm); text-align: center; white-space: nowrap; }
+.meeting-page-status strong { color: var(--ink); }
 .document-shell, .page-container { width: min(960px, 100%); margin: 0 auto; padding: 28px 28px 80px; }
 .document-shell > h1 { margin: 8px 0 24px; font-size: 32px; font-weight: 600; }
 .meeting-page { width: min(1040px, 100%); }
+.meeting-page > .inline-notice { margin-bottom: 24px; }
 .meeting-page > .meeting-overview { display: grid; gap: 20px; padding: 28px; }
 .meeting-overview > h2 { margin: 0; font-size: var(--type-size-display-sm); }
 .audio-parts { display: grid; gap: 12px; }
@@ -379,4 +384,17 @@
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}
+
+.tutorial-attribution { display: grid; gap: 24px; }
+.tutorial-instructions { display: grid; gap: 10px; }
+.tutorial-instructions p { margin: 0; color: var(--ink-muted); line-height: 1.75; }
+.tutorial-source-details { display: grid; gap: 16px; margin: 0; padding: 20px; border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-2); }
+.tutorial-source-details > div { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 16px; }
+.tutorial-source-details dt { color: var(--ink); font-weight: 600; }
+.tutorial-source-details dd { display: grid; gap: 4px; margin: 0; color: var(--ink-muted); overflow-wrap: anywhere; line-height: 1.65; }
+.tutorial-source-details a { width: fit-content; color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.tutorial-source-details dd > span { color: var(--ink-subtle); font-size: var(--type-size-caption-sm); }
+@media (max-width: 640px) {
+  .tutorial-source-details > div { grid-template-columns: 1fr; gap: 4px; }
 }

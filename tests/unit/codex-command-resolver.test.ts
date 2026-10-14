@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -21,9 +21,18 @@ describe('Codex command resolver', () => {
   it('disables external CLI discovery for the Mac App Store sandbox', async () => {
     await expect(createCodexCommandResolver({ disabled: true })()).resolves.toEqual([])
   })
-  it('keeps non-Windows invocation direct and shell-free', async () => {
-    await expect(createCodexCommandResolver({ platform: 'darwin', pathValue: '/unused' })())
-      .resolves.toEqual([{ command: 'codex', argsPrefix: [] }])
+  it('resolves a macOS app-bundled CLI to an absolute executable without a shell', async () => {
+    const base = await root()
+    const bundledCodex = join(base, 'ChatGPT.app', 'Contents', 'Resources', 'codex')
+    await mkdir(join(base, 'ChatGPT.app', 'Contents', 'Resources'), { recursive: true })
+    await writeFile(bundledCodex, '#!/bin/sh\nexit 0\n')
+    await chmod(bundledCodex, 0o755)
+
+    await expect(createCodexCommandResolver({
+      platform: 'darwin',
+      pathValue: '/usr/bin:/bin',
+      posixFallbacks: [bundledCodex],
+    })()).resolves.toEqual([{ command: bundledCodex, argsPrefix: [] }])
   })
 
   it('prefers a real codex.exe anywhere on Windows PATH even when npm shims precede it', async () => {

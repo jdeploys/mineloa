@@ -4,6 +4,7 @@ import type { MeetingRepository, ProcessingAttempt, ProcessingStage } from '../d
 import type { ProcessingProgress, ProcessingStatus } from '../../shared/contracts/processing'
 import type { AudioPolicy } from '../../shared/contracts/meeting'
 import { PROCESS_OWNER_ID } from './processingOwner'
+import type { ProcessingProviderSettings, SummaryProviderId, TranscriptionProviderId } from '../../shared/contracts/settings'
 
 interface TranscriptionProgressReport {
   unitStartedAt: string
@@ -20,10 +21,11 @@ interface TranscriptionPort {
       attemptId: string
       ownerId: string
       onProgress?: (progress: TranscriptionProgressReport) => void
+      providerId?: TranscriptionProviderId
     },
   ): Promise<unknown>
 }
-interface SummaryPort { summarizeMeeting(meetingId: string): Promise<unknown> }
+interface SummaryPort { summarizeMeeting(meetingId: string, providerId?: SummaryProviderId): Promise<unknown> }
 interface FilePort { remove(path: string): Promise<void> }
 
 export class ProcessingAlreadyRunningError extends Error {
@@ -46,7 +48,8 @@ function safeFailure(error: unknown): { code: string; message: string; retryable
 function canRetry(error: { code: string; retryable: boolean }): boolean {
   // Releases before the diarized-duration fallback persisted this code as
   // non-retryable. Local runtime failures could also be persisted as
-  // non-retryable before development runtime auto-discovery was added.
+  // non-retryable before development runtime auto-discovery was added, and
+  // padded whisper.cpp tail timestamps were once rejected as invalid output.
   // A recording longer than the transcription model accepts was rejected as an
   // unreadable file before parts were cut to fit, and those parts are cut now.
   // Keep those saved recordings recoverable after upgrading.
@@ -54,6 +57,7 @@ function canRetry(error: { code: string; retryable: boolean }): boolean {
     || error.code === 'OPENAI_MALFORMED_RESPONSE'
     || error.code === 'LOCAL_WHISPER_RUNTIME_UNAVAILABLE'
     || error.code === 'OPENAI_INVALID_AUDIO'
+    || error.code === 'LOCAL_WHISPER_INVALID_OUTPUT'
 }
 
 export class ProcessingService {
@@ -70,6 +74,8 @@ export class ProcessingService {
     private readonly recordingsDirectory: string,
     private readonly files: FilePort = { remove: (path) => rm(path, { force: true }) },
     private readonly ownerId: string = PROCESS_OWNER_ID,
+    private readonly snapshotProviders?: () => ProcessingProviderSettings,
+    private readonly preflightProviders?: (providers: ProcessingProviderSettings, stage: 'all' | 'summary') => Promise<void>,
   ) {
     // The Electron composition root constructs this only after obtaining the
     // single-instance lock, so another owner represents a crashed prior Main process.
@@ -132,7 +138,11 @@ export class ProcessingService {
       if (status.failedStage === 'cleanup') {
         await this.applyRetention(meetingId)
       } else if (status.failedStage === 'summarizing') {
-        await this.runStage(meetingId, 'summarizing', () => this.meetings.beginSummarization(meetingId), () => this.summary.summarizeMeeting(meetingId))
+        const providers = this.snapshotProviders?.()
+        await this.runStage(meetingId, 'summarizing', () => this.meetings.beginSummarization(meetingId), async () => {
+          if (providers !== undefined) await this.preflightProviders?.(providers, 'summary')
+          return this.summary.summarizeMeeting(meetingId, providers?.summaryProvider)
+        })
         await this.applyRetention(meetingId)
       } else {
         return this.runFromTranscription(meetingId)
@@ -142,8 +152,12 @@ export class ProcessingService {
   }
 
   private async runFromTranscription(meetingId: string): Promise<ProcessingStatus> {
-    await this.runStage(meetingId, 'transcribing', () => this.meetings.beginTranscription(meetingId), (attempt) => this.transcribeReporting(meetingId, attempt))
-    await this.runStage(meetingId, 'summarizing', undefined, () => this.summary.summarizeMeeting(meetingId))
+    const providers = this.snapshotProviders?.()
+    await this.runStage(meetingId, 'transcribing', () => this.meetings.beginTranscription(meetingId), async (attempt) => {
+      if (providers !== undefined) await this.preflightProviders?.(providers, 'all')
+      return this.transcribeReporting(meetingId, attempt, providers?.transcriptionProvider)
+    })
+    await this.runStage(meetingId, 'summarizing', undefined, () => this.summary.summarizeMeeting(meetingId, providers?.summaryProvider))
     await this.applyRetention(meetingId)
     return this.getStatus(meetingId)
   }
@@ -206,10 +220,11 @@ export class ProcessingService {
     this.emit(this.getStatus(meetingId))
   }
 
-  private transcribeReporting(meetingId: string, attempt: ProcessingAttempt): Promise<unknown> {
+  private transcribeReporting(meetingId: string, attempt: ProcessingAttempt, providerId?: TranscriptionProviderId): Promise<unknown> {
     return this.transcription.transcribeMeeting(meetingId, {
       attemptId: attempt.id,
       ownerId: this.ownerId,
+      providerId,
       onProgress: (report) => {
         this.progress.set(meetingId, { startedAt: attempt.startedAt, ...report })
         this.emit(this.getStatus(meetingId))

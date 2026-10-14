@@ -8,6 +8,7 @@ interface CommandResult { status: number | null; error?: Error }
 interface AfterSignDependencies {
   run?(program: string, args: string[]): CommandResult
   signingConfigured?(): boolean
+  existingSignatureValid?(appPath: string): boolean
 }
 
 export function createAfterSignHook(dependencies?: AfterSignDependencies): (context: AfterSignContext) => Promise<void>

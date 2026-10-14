@@ -17,6 +17,7 @@ const processingSettingsApi = () => ({
   getProcessingProviders: vi.fn().mockResolvedValue(defaultProcessingProviderSettings),
   updateProcessingProviders: vi.fn(async (input) => input),
   listProcessingProviderDescriptors: vi.fn().mockResolvedValue([]),
+  prepareAppleSpeech: vi.fn().mockResolvedValue({ available: false, code: 'APPLE_HELPER_UNAVAILABLE', message: 'Unavailable' }),
   listWhisperModels: vi.fn().mockResolvedValue([]),
   downloadWhisperModel: vi.fn(),
   deleteWhisperModel: vi.fn(),

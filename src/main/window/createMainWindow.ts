@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { BrowserWindow, type BrowserWindowConstructorOptions } from 'electron'
+import { isTutorialExternalUrl } from '../../shared/tutorialMeeting'
+import { BrowserWindow, shell, type BrowserWindowConstructorOptions } from 'electron'
 
 type MainWindow = Pick<BrowserWindow, 'isMinimized' | 'restore' | 'show' | 'focus'>
 
@@ -42,7 +43,10 @@ export function createMainWindow(): BrowserWindow {
     }
   })
 
-  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isTutorialExternalUrl(url)) void shell.openExternal(url).catch(() => undefined)
+    return { action: 'deny' }
+  })
   window.webContents.session.setPermissionRequestHandler(
     (_webContents, permission, callback, details) => {
       callback(permission === 'media' && isAllowedRendererUrl(details.requestingUrl, rendererUrl))

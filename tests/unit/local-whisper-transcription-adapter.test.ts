@@ -137,7 +137,6 @@ describe('LocalWhisperTranscriptionAdapter', () => {
     ['malformed JSON', '{bad'],
     ['bad timestamp', whisperJson([{ timestamps: { from: '00:00:00,020', to: '00:00:00,010' }, offsets: { from: 20, to: 10 }, text: 'bad' }])],
     ['empty text', whisperJson([{ timestamps: { from: '00:00:00,000', to: '00:00:00,010' }, offsets: { from: 0, to: 10 }, text: '   ' }])],
-    ['segment beyond duration', whisperJson([{ timestamps: { from: '00:00:00,000', to: '00:00:05,000' }, offsets: { from: 0, to: 5000 }, text: 'too long' }])],
   ])('rejects %s with no output detail leakage', async (_label, output) => {
     const h = await harness({ output })
     if (output === undefined) h.run.mockImplementationOnce(async (request) => {
@@ -309,9 +308,6 @@ describe('pinned whisper.cpp output parser', () => {
       timestamps: { from: 'not-a-time', to: 'still-not-a-time' }, offsets: { from: 0, to: 1 }, text: 'x',
     }]), 2)).toThrow()
     expect(() => parseWhisperOutput(whisperJson([{
-      timestamps: { from: '00:00:00,000', to: '00:00:03,000' }, offsets: { from: 0, to: 3000 }, text: 'too long',
-    }]), 2)).toThrow()
-    expect(() => parseWhisperOutput(whisperJson([{
       timestamps: { from: '00:00:60,000', to: '00:01:00,001' }, offsets: { from: 60_000, to: 60_001 }, text: 'range',
     }]), 120)).toThrow()
     expect(() => parseWhisperOutput(whisperJson([{
@@ -324,6 +320,20 @@ describe('pinned whisper.cpp output parser', () => {
       { timestamps: { from: '00:00:00,000', to: '00:00:01,000' }, offsets: { from: 0, to: 1000 }, text: 'first' },
       { timestamps: { from: '00:00:00,500', to: '00:00:00,600' }, offsets: { from: 500, to: 600 }, text: 'regressed' },
     ]), 2)).toThrow()
+  })
+
+  it('clips whisper.cpp padding past the recording duration and drops fully padded segments', () => {
+    expect(parseWhisperOutput(whisperJson([
+      { timestamps: { from: '00:00:00,000', to: '00:00:29,760' }, offsets: { from: 0, to: 29_760 }, text: '정상 전사' },
+      { timestamps: { from: '00:00:29,760', to: '00:00:35,260' }, offsets: { from: 29_760, to: 35_260 }, text: '끝부분' },
+      { timestamps: { from: '00:00:35,260', to: '00:00:40,000' }, offsets: { from: 35_260, to: 40_000 }, text: '패딩' },
+    ]), 30.269)).toEqual({
+      durationSeconds: 30.269,
+      segments: [
+        { speakerLabel: null, startSeconds: 0, endSeconds: 29.76, text: '정상 전사' },
+        { speakerLabel: null, startSeconds: 29.76, endSeconds: 30.269, text: '끝부분' },
+      ],
+    })
   })
 })
 

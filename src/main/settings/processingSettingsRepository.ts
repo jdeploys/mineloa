@@ -54,8 +54,8 @@ export class ProcessingSettingsRepository {
   private reconcile(value: ProcessingProviderSettings): ProcessingProviderSettings {
     return {
       ...value,
-      transcriptionProvider: this.localWhisperEnabled ? value.transcriptionProvider : 'openai',
-      summaryProvider: this.codexCliEnabled ? value.summaryProvider : 'openai',
+      transcriptionProvider: !this.localWhisperEnabled && value.transcriptionProvider === 'local_whisper' ? 'openai' : value.transcriptionProvider,
+      summaryProvider: !this.codexCliEnabled && value.summaryProvider === 'codex_cli' ? 'openai' : value.summaryProvider,
     }
   }
 }

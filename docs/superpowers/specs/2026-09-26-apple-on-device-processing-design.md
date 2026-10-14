@@ -198,3 +198,47 @@ ID·어댑터·구조화 요약 context·설정 UI·준비 IPC를 추가한다. 
 - [컨텍스트 관리](https://developer.apple.com/documentation/foundationmodels/managing-the-context-window): 입력·출력 예산과 초과 처리.
 
 2026-09-26 공식 문서와 현재 저장소의 정적 흐름을 확인했다. 웹 문서에는 후속 OS API도 섞여 있으므로 정확한 메서드 시그니처와 availability는 구현 SDK에서 재확인해야 한다. 한국어 전사 품질, MAS helper 권한, 성능, 심사 통과 여부는 아직 검증되지 않았다.
+
+## 12. 2026-10-12 구현·실기기 확인 기록
+
+작업 트리의 Apple 공급자 구현을 이어서 점검했다. macOS 26.5.2 / arm64 / Xcode 26.6에서 Swift 6 helper 빌드와 앱 TypeScript 검사·빌드가 통과했다. 설정 보존, 처리 시도 공급자 고정, helper 경계, 음성 임시 파일 정리 및 서명 관련 최소 테스트 6개 파일 / 72개가 통과했다. 전체 release suite는 실행하지 않았다.
+
+추가로 고친 부분:
+
+- Swift JSON에서 화자·출처·담당자·기한의 null을 생략하지 않고 기존 공통 계약대로 출력한다.
+- 긴 요약 병합에서 후보 순번을 원본 sourceIndex로 바꾸지 않는다. 출처 없는 서술은 null로 유지한다. 축약이 입력 크기를 줄이지 못하면 종료한다.
+- macOS 26.4 이상에서는 실제 토큰 계산으로 템플릿 초과를 판정한다.
+- helper 입력 필드를 검증하고 stdin 읽기 크기를 제한한다.
+- 앱 종료 시 helper 및 Apple 경로의 FFmpeg 작업을 취소한다.
+
+Swift 순수 계약 검증은 `bash scripts/test-apple-processing.sh`로 실행할 수 있다. null 출력, 긴 한국어 줄의 누락 없는 분할, 원래 sourceIndex 유지, 출처 없는 데이터 및 알 수 없는 요청 필드 거부를 직접 검증한다.
+
+실제 helper에서 Apple Intelligence 활성화·모델 준비 후 API 키 없는 한국어 구조화 요약이 생성됐다. 짧은 두 결정 사항 샘플에서 한 항목이 누락돼 품질 통과로 판정하지 않았다. 사용자 요청으로 한국어 Speech 자산 준비를 실행했고 speech/summary 모두 available 상태가 확인됐다.
+
+`npm run package:mas-dev:arm64`로 Apple Development 서명 패키지 생성 및 `codesign --verify --deep --strict` 검증은 통과했다. 그러나 실행은 `No matching profile found`로 차단됐다. 이 Mac에는 해당 팀·앱 ID의 개발 provisioning profile이 없다. Mineloa용 Mac 개발 프로필과 이 Mac 등록을 갖춘 뒤 패키지를 최신 소스로 다시 생성하고 MAS 내부의 상태 조회·자산 설치·전사·요약을 검증해야 한다. 서명 확인만으로 1단계 완료나 출시 가능 상태로 판정하지 않는다.
+
+남은 필수 검증: 실제 서명된 MAS 앱, 네트워크를 끈 조건, 장시간 회의의 성능·품질, 강제 종료 후 임시 파일 정리. README·스토어 메타데이터에 출시 기능으로 반영하지 않았다.
+
+추가 실기기 결과: 합성 한국어 음성을 Chromium MediaRecorder로 앱과 같은 WebM/Opus에 담고 번들 FFmpeg로 16kHz mono PCM WAV로 변환한 뒤 SpeechAnalyzer의 최종 결과를 받았다. 약 3.84초 샘플에서 “오늘 회의에서는 다음 배포를 금요일에 하기로 결정했습니다.”가 null 화자와 구간 시각으로 정상 반환됐다. 변환기의 EOF 이후 추가 읽기에서 발생하던 오류를 수정했고, 마지막 PCM 버퍼가 부분 길이일 때도 정확한 프레임 수로 변환되는 Swift 회귀 검증을 추가했다. 이 확인은 CLI 조건이며 MAS 샌드박스·오프라인 실측·실제 회의 품질 검증을 대체하지 않는다.
+
+## 13. 2026-10-14 Mac 개발 서명 준비
+
+사용자가 승인한 범위에서 CHANMI KIM 팀(J3W2GDPJ7Y)에 현재 Mac을 개발 기기로 등록하고 이 Mac의 로컬 개인키에 대응하는 Apple Development 인증서를 발급했다. 개인키는 저장소 밖의 로컬 키체인 및 접근 제한된 서명 자료 디렉터리에 보관한다. `Mineloa Mac Development 2026-10-14` 프로필은 `com.jdeploys.mineloa`, 새 인증서, 현재 Mac만 포함하며 2027-10-14에 만료된다. 다운로드한 프로필의 앱 ID·인증서 SHA-1·기기 일치를 검증하고 Xcode의 로컬 프로필 디렉터리에 설치했다. 기존 배포 인증서와 제출용 프로필은 수정하지 않았다.
+
+새 Xcode 27의 사용권 미동의로 Swift 빌드가 중단됐다. Xcode 동의 화면을 열었고 사용자에게 직접 동의를 요청했다. 이 동의가 끝난 뒤 새 개발 프로필 및 같은 팀의 인증서로 mas-dev를 재빌드하고 실행 검증을 이어가야 한다.
+
+Xcode 사용권 동의가 반영된 뒤 Xcode 27에서 Swift helper 빌드와 Swift 계약 검증을 통과했다. MAS 개발판 빌드는 `MAS_APP_SIGNING_IDENTITY`와 `CSC_NAME`에 해당 프로필에 포함된 개발 인증서를 지정하고 `--config.masDev.provisioningProfile=<개발 프로필 경로>`로 수행한다. 로컬 개발 서명에는 `--config.masDev.timestamp=none`을 사용했다. 키체인의 최초 서명키 사용 승인은 사용자가 직접 완료했다.
+
+실행 검증에서 Apple silicon의 일반 하드웨어 UUID와 Provisioning UDID가 다름을 확인했다. 최초 하드웨어 UUID 등록은 이 Mac의 실행 허가에 유효하지 않았으며, `system_profiler SPHardwareDataType`의 `provisioning_UDID`로 개발 기기를 등록하고 프로필의 포함 기기를 교체했다. 수정된 프로필·인증서의 일치를 확인한 후 번들의 embedded.provisionprofile을 갱신하고 entitlements를 보존해 재서명했다. `codesign --verify --deep --strict`를 통과했고 실제 mas-dev 앱 창이 열렸다. 설정 UI에서 Apple 음성 전사와 Apple Intelligence 요약을 선택·저장했으며 helper 상태 조회에서 두 공급자 모두 미준비 오류 없이 사용 가능했다. 실제 MAS 회의 전사·요약 작업 및 오프라인·장시간 품질 검증은 별도로 남아 있다.
+
+## 14. 2026-10-14 기존 데이터 처리 수정 및 재검증
+
+기존 99.234초 녹음을 보존한 아카이브 복사본을 서명된 mas-dev 앱에 가져와 처리했다. 전사는 완료됐지만 요약의 helper 출력 검증이 두 차례 실패했다. 공통 SummaryService 계약과 맞추어 잘못된 출처 참조는 null로 정규화하고, 화자 ID가 없는 전사에서는 생성된 담당자 ID를 null로 처리했다. 알려진 화자가 있는 경우 알 수 없는 담당자 ID는 계속 거부한다. 단일 구간 요약의 불필요한 재생성을 제거하고, 전사에 없는 결정·업무를 추측하지 않는 지시 및 출처 번호와 생성 항목 순번의 구분을 강화했다.
+
+Swift 회귀 검증에 범위 밖 출처·화자 없는 입력의 담당자 정규화와 알려진 화자 목록의 외부 담당자 거부를 추가했다. Swift 계약 검증, TypeScript 검사, diff 공백 검사 및 서명 검증이 통과했다. 같은 기존 녹음을 새 복사본에서 전사부터 처리하여 앱 UI의 회의록 생성 완료와 결과 저장을 확인했다. 해당 샘플은 불명확한 발화가 포함돼 핵심 요약 품질은 제한적이지만, 근거 없는 결정사항과 할 일은 생성하지 않았으며 주요 논의의 출처 시각이 전사와 일치했다. 원래 DB·오디오·요약은 변경하지 않았다. 장시간 회의 및 오프라인 검증은 미완료다.
+
+## 15. 정답 대본이 있는 한국어 낭독 기준 샘플
+
+2026-10-14 `google/fleurs`의 `ko_kr/test` 첫 3개 공개 샘플을 내려받아 현재 helper에 PCM WAV로 직접 입력했다. WebM 변환·MAS UI를 제외해 전사 모델의 기본 인식 상태를 분리한 검사다. 길이는 각각 12.48초, 10.80초, 8.94초다. NFC 정규화 후 띄어쓰기·문장부호를 제거한 정답 53/41/33글자에 대해 편집거리는 1/2/0, 합계 CER은 3/127=2.36%였다. 숫자 표기 차이도 이 지표의 오류에 포함한다. 셋째 문장은 정답과 일치했다. 데이터 출처: https://huggingface.co/datasets/google/fleurs .
+
+이 전사 3개를 기본 템플릿으로 요약했을 때 주요 수치·날짜·사실을 보존하고 actionItems는 비어 있었지만 역사적 사실을 결정사항 섹션에도 반복해 넣었다. 따라서 짧은 낭독 전사 기준은 양호하나 회의용 요약의 섹션 분류 품질은 추가 개선이 필요하다. 3개 샘플로 일반 회의·먼 거리 음성·장시간 품질을 일반화하지 않는다.

@@ -9,6 +9,7 @@ playwright-report/
 build/local-runtime/.work/
 build/local-runtime/win32-*/
 build/local-runtime/darwin-*/
+build/apple-processing/
 .signing-private/
 .DS_Store
 build/developer-id-bootstrap/

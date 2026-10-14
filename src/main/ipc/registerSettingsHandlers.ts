@@ -35,6 +35,7 @@ export function registerSettingsHandlers(
   whisperModels: WhisperModels,
   publishWhisperProgress: (progress: WhisperModelProgress) => void,
   now: () => Date = () => new Date(),
+  appleSpeech?: { prepareSpeech(): Promise<{ available: boolean; code: string | null; message: string | null }> },
 ): void {
   let lastValidatedAt: string | null = null
 
@@ -67,6 +68,10 @@ export function registerSettingsHandlers(
   ipcMain.handle('settings:list-processing-provider-descriptors', async () => (
     processingProviders.descriptors()
   ))
+  ipcMain.handle('settings:prepare-apple-speech', async () => {
+    if (appleSpeech === undefined || appleSpeech === null) throw new Error('Apple Speech is unavailable')
+    return appleSpeech.prepareSpeech()
+  })
 
   ipcMain.handle('settings:list-whisper-models', async () => whisperModels.list())
   ipcMain.handle('settings:download-whisper-model', async (_event, modelId) => (
