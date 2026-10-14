@@ -27,6 +27,15 @@ export class ProcessingSettingsRepository {
     this.localWhisperEnabled = options.localWhisperEnabled ?? true
   }
 
+  initializeForInstallation(firstInstall: boolean, platform: NodeJS.Platform): void {
+    if (!firstInstall || platform !== 'darwin') return
+    this.database.transaction(() => {
+      if (this.database.prepare("SELECT 1 FROM app_settings WHERE key = 'processing_defaults_initialized'").get()) return
+      this.update({ transcriptionProvider: 'apple_speech', summaryProvider: 'apple_foundation', localWhisperModel: 'base' })
+      this.database.prepare("INSERT INTO app_settings (key, value_json) VALUES ('processing_defaults_initialized', 'true')").run()
+    })()
+  }
+
   get(): ProcessingProviderSettings {
     const row = this.database.prepare('SELECT value_json FROM app_settings WHERE key = ?')
       .get('processing_providers') as { value_json: string } | undefined

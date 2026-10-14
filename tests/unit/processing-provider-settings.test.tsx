@@ -396,6 +396,6 @@ describe('processing provider settings visible outcomes', () => {
     expect(screen.getByLabelText('회의록 작성 방식')).toHaveValue('openai')
     expect(screen.getByLabelText('OpenAI API 키')).toBeVisible()
     expect(screen.getByText('음성은 이 Mac에서 처리하고, 변환된 전사문은 OpenAI로 전송합니다.')).toBeVisible()
-    expect(screen.getByRole('button', { name: '한국어 음성 모델 준비' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '음성 모델 준비' })).toBeVisible()
   })
 })

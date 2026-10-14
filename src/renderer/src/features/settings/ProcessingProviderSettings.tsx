@@ -88,7 +88,7 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
       await settings.prepareAppleSpeech()
       await refreshDescriptors()
     } catch {
-      setError('한국어 음성 모델을 준비하지 못했습니다. 잠시 후 다시 시도하세요.')
+      setError('음성 모델을 준비하지 못했습니다. 잠시 후 다시 시도하세요.')
     }
   })
 
@@ -120,9 +120,9 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
     </div>
     {transcription?.id === 'apple_speech' && transcription.availability.available === false && <p role="status" className="settings-meta">{transcription.availability.message}</p>}
     {summary?.id === 'apple_foundation' && summary.availability.available === false && <p role="status" className="settings-meta">{summary.availability.message}</p>}
-    {value.transcriptionProvider === 'apple_speech' && <FieldHelp>Apple 음성 전사는 화자를 자동 구분하지 않습니다. 한국어 음성 모델을 준비한 뒤 상태를 다시 확인하세요. 모델 준비에는 인터넷이 필요할 수 있습니다.</FieldHelp>}
-    {value.transcriptionProvider === 'apple_speech' && <button type="button" disabled={busy} onClick={() => void prepareAppleSpeech()}>{pendingOperation === 'apple_prepare' ? '준비 중…' : '한국어 음성 모델 준비'}</button>}
-    {value.summaryProvider === 'apple_foundation' && <FieldHelp>Apple Intelligence가 켜져 있고 기기 모델이 준비되어 있어야 합니다. 시스템 설정에서 상태를 확인하세요.</FieldHelp>}
+    {value.transcriptionProvider === 'apple_speech' && <FieldHelp>Apple 음성 전사는 화자를 자동 구분하지 않습니다. Mac의 기본 언어가 한국어이면 한국어, 그 외에는 영어 음성 모델을 준비합니다. 모델 준비에는 인터넷이 필요할 수 있습니다.</FieldHelp>}
+    {value.transcriptionProvider === 'apple_speech' && <button type="button" disabled={busy} onClick={() => void prepareAppleSpeech()}>{pendingOperation === 'apple_prepare' ? '준비 중…' : '음성 모델 준비'}</button>}
+    {value.summaryProvider === 'apple_foundation' && <FieldHelp>API 키 없이 이 Mac에서 요약합니다. Apple silicon Mac과 macOS 26 이상이 필요합니다. 시스템 설정 → Apple Intelligence 및 Siri에서 Apple Intelligence를 켜고 모델 준비를 완료한 뒤 상태를 다시 확인하세요.</FieldHelp>}
     {(value.transcriptionProvider === 'apple_speech' || value.summaryProvider === 'apple_foundation') && <button type="button" disabled={busy} onClick={() => void refreshDescriptors()}>상태 다시 확인</button>}
     {usesOpenAi && <div className="openai-settings" role="region" aria-label="OpenAI 설정">
       <div className="local-settings-heading">

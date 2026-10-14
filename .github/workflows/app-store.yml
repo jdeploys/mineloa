@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   build-and-upload:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 120
     environment: app-store
     steps:
@@ -41,6 +41,8 @@ jobs:
         run: npm run lint && npm run typecheck && npm run rebuild:node && npm run test:unit && npm run test:integration
       - name: Build pinned Apple Silicon local runtime
         run: bash ./scripts/build-local-runtime.sh arm64 2>&1 | tee runtime-build.log
+      - name: Build Apple on-device processing helper
+        run: bash ./scripts/build-apple-processing.sh arm64
       - name: Install App Store provisioning profile
         env:
           MAS_PROVISIONING_PROFILE_BASE64: ${{ secrets.MAS_PROVISIONING_PROFILE_BASE64 }}

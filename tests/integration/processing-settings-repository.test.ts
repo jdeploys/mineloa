@@ -20,6 +20,20 @@ function temporaryDatabasePath(): string {
 }
 
 describe('processing settings repository', () => {
+  it('initializes new Macs to Apple once while preserving later choices and existing installations', () => {
+    const database = openDatabase(temporaryDatabasePath())
+    const settings = new ProcessingSettingsRepository(database)
+    settings.initializeForInstallation(false, 'darwin')
+    expect(settings.get().transcriptionProvider).toBe('openai')
+    settings.initializeForInstallation(true, 'win32')
+    expect(settings.get().summaryProvider).toBe('openai')
+    settings.initializeForInstallation(true, 'darwin')
+    expect(settings.get()).toEqual({ transcriptionProvider: 'apple_speech', summaryProvider: 'apple_foundation', localWhisperModel: 'base' })
+    settings.update({ transcriptionProvider: 'openai', summaryProvider: 'openai', localWhisperModel: 'base' })
+    settings.initializeForInstallation(true, 'darwin')
+    expect(settings.get().transcriptionProvider).toBe('openai')
+    database.close()
+  })
   it('defaults existing databases to OpenAI providers without changing existing rows', () => {
     const path = temporaryDatabasePath()
     const existing = new Database(path)

@@ -82,6 +82,7 @@ if (verificationRequest !== null) {
           codexCliEnabled: !process.mas,
           localWhisperEnabled: !process.mas,
         })
+        processingSettings.initializeForInstallation(firstInstall, process.platform)
         const whisperModels = new WhisperModelManager(join(userDataDirectory, 'models', 'whisper'))
         const appleHelper = process.platform === 'darwin' ? new AppleHelper({
           isPackaged: app.isPackaged,

@@ -7,7 +7,7 @@ import Speech
 
 private let protocolVersion = 1
 private let maximumRequestBytes = 16 * 1024 * 1024
-private let korean = Locale(identifier: "ko-KR")
+private let speechLocale = Locale(identifier: Locale.preferredLanguages.first?.hasPrefix("ko") == true ? "ko-KR" : "en-US")
 
 private struct Request: Decodable {
     let protocolVersion: Int
@@ -161,7 +161,7 @@ private struct Evidence {
 
 private func speechAvailability() async -> Availability {
     guard SpeechTranscriber.isAvailable else { return .unavailable("APPLE_SPEECH_UNAVAILABLE") }
-    guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: korean) else {
+    guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: speechLocale) else {
         return .unavailable("APPLE_SPEECH_LOCALE_UNSUPPORTED")
     }
     let transcriber = SpeechTranscriber(locale: locale, preset: .timeIndexedTranscriptionWithAlternatives)
@@ -178,7 +178,7 @@ private func summaryAvailability() -> Availability {
     let model = SystemLanguageModel.default
     switch model.availability {
     case .available:
-        return model.supportsLocale(korean) ? .ready : .unavailable("APPLE_SUMMARY_LOCALE_UNSUPPORTED")
+        return model.supportsLocale(speechLocale) ? .ready : .unavailable("APPLE_SUMMARY_LOCALE_UNSUPPORTED")
     case .unavailable(.deviceNotEligible): return .unavailable("APPLE_SUMMARY_UNAVAILABLE")
     case .unavailable(.appleIntelligenceNotEnabled): return .unavailable("APPLE_SUMMARY_INTELLIGENCE_DISABLED")
     case .unavailable(.modelNotReady): return .unavailable("APPLE_SUMMARY_MODEL_NOT_READY")
@@ -188,7 +188,7 @@ private func summaryAvailability() -> Availability {
 
 private func prepareSpeech() async throws -> StatusResult {
     guard SpeechTranscriber.isAvailable else { throw Failure(code: "APPLE_SPEECH_UNAVAILABLE") }
-    guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: korean) else {
+    guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: speechLocale) else {
         throw Failure(code: "APPLE_SPEECH_LOCALE_UNSUPPORTED")
     }
     let transcriber = SpeechTranscriber(locale: locale, preset: .timeIndexedTranscriptionWithAlternatives)
@@ -293,7 +293,7 @@ private func transcribe(_ payload: Payload?) async throws -> TranscriptionResult
     }
     let available = await speechAvailability()
     guard available.available else { throw Failure(code: available.code ?? "APPLE_SPEECH_UNAVAILABLE") }
-    guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: korean) else {
+    guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: speechLocale) else {
         throw Failure(code: "APPLE_SPEECH_LOCALE_UNSUPPORTED")
     }
     let file = try AVAudioFile(forReading: url)
