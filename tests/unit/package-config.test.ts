@@ -200,6 +200,7 @@ describe('release package configuration', () => {
     expect(manifest.build.mac.signIgnore).toEqual([
       '/Contents/Resources/local-runtime/darwin-(?:x64|arm64)/whisper-cli$',
       '/Contents/Resources/local-runtime/darwin-(?:x64|arm64)/ffmpeg$',
+      '/Contents/Resources/apple-processing/apple-processing-helper$',
     ])
     expect(workflow).not.toContain('--config.mac.hardenedRuntime=false')
     expect(workflow).toContain('MAC_CSC_LINK')
