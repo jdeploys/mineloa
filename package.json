@@ -26,6 +26,7 @@
     "package:mac:x64": "npm run build && bash scripts/build-apple-processing.sh x64 && npm run rebuild:electron && electron-builder --mac dmg dir --x64 --publish never",
     "package:mac:arm64": "npm run build && bash scripts/build-apple-processing.sh arm64 && npm run rebuild:electron && electron-builder --mac dmg dir --arm64 --publish never",
     "release:mac": "bash scripts/release-mac.sh",
+    "deploy:app-store": "node scripts/deploy-app-store.mjs",
     "package:mac:local": "bash scripts/package-mac-local.sh",
     "install:mac:local": "bash scripts/package-mac-local.sh --install",
     "package:mas:arm64": "npm run build && bash scripts/build-apple-processing.sh arm64 && npm run rebuild:electron && MAS_BUILD=true electron-builder --mac mas --arm64 --publish never",

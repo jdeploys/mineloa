@@ -1,5 +1,22 @@
 # Mineloa 배포 가이드
 
+## Mac App Store 배포 스크립트
+
+```bash
+npm run deploy:app-store -- --version 1.0 --build 6
+```
+
+커밋하고 원격 브랜치에 푸시한 상태에서 실행합니다. `git`, Node.js, GitHub CLI(`gh`)와 이 저장소의 Actions 실행 권한이 필요합니다. `gh auth login`으로 로그인합니다. 위의 `6`은 이미 업로드한 `1.0 (5)` 다음 번호 예시이며, 업로드마다 사용하지 않은 빌드 번호를 지정합니다.
+
+스크립트는 `.github/workflows/app-store.yml`을 실행하고 해당 실행을 기다립니다. CI가 테스트, Apple helper와 런타임 빌드, 배포 인증서 서명, 패키지 검증, App Store Connect 업로드를 수행합니다. 성공하면 패키지와 검증 로그를 `dist/app-store-<버전>-<빌드>/<실행 ID>/`에 다운로드합니다. 실패 시 0이 아닌 종료 코드를 반환하며 출력된 Actions 링크에서 원인을 확인합니다.
+
+- 명령만 확인: `npm run deploy:app-store -- --version 1.0 --build 6 --dry-run`
+- 업로드 없이 서명 패키지 생성: `npm run deploy:app-store -- --version 1.0 --build 6 --build-only`
+
+서명 자료는 GitHub `app-store` environment의 기존 secrets를 사용합니다. 로컬에 인증서나 API 키를 복사할 필요가 없습니다. 환경을 새로 만들 때 필요한 secrets는 `MAS_PROVISIONING_PROFILE_BASE64`, `MAS_CERTIFICATE_P12_BASE64`, `MAS_INSTALLER_CERTIFICATE_P12_BASE64`, `MAS_CERTIFICATE_PASSWORD`, `ASC_API_PRIVATE_KEY`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID`입니다.
+
+이 명령의 완료 범위는 **빌드 업로드**입니다. Apple의 빌드 처리가 끝난 뒤 App Store Connect에서 빌드 선택, 메타데이터 확인, 심사 제출과 소명을 진행합니다. 현재 심사 대기 중인 1.0 (5)을 바꾸거나 심사를 취소하지 않습니다.
+
 ## 현재 자동화 동작
 
 - `main`에 푸시하면 `.github/workflows/ci.yml`의 빠른 CI만 실행됩니다. 릴리스나 설치 파일 업로드는 하지 않습니다.

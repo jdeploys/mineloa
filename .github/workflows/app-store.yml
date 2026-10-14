@@ -1,4 +1,5 @@
 name: mac-app-store
+run-name: "App Store ${{ inputs.marketing_version }} (${{ inputs.build_number }}) ${{ inputs.request_id }}"
 
 on:
   workflow_dispatch:
@@ -11,6 +12,10 @@ on:
       build_number:
         description: Unique App Store build number
         required: true
+        type: string
+      request_id:
+        description: Deployment script correlation ID
+        required: false
         type: string
       upload:
         description: Validate and upload to App Store Connect
@@ -36,6 +41,12 @@ jobs:
         with:
           node-version: 22.12.0
           cache: npm
+      - name: Validate version inputs
+        env:
+          MAS_MARKETING_VERSION: ${{ inputs.marketing_version }}
+          MAS_BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          node --input-type=module -e 'import {parseArguments} from "./scripts/deploy-app-store.mjs"; parseArguments(["--version", process.env.MAS_MARKETING_VERSION, "--build", process.env.MAS_BUILD_NUMBER]);'
       - run: npm ci
       - name: Validate release candidate
         run: npm run lint && npm run typecheck && npm run rebuild:node && npm run test:unit && npm run test:integration
@@ -97,16 +108,19 @@ jobs:
           npm run rebuild:electron
           npx electron-builder --mac mas --arm64 --publish never \
             --config.mas.provisioningProfile=build/mineloa-app-store.provisionprofile \
-            --config.mas.bundleShortVersion='${{ inputs.marketing_version }}' \
-            --config.mas.bundleVersion='${{ inputs.build_number }}'
+            --config.mas.bundleShortVersion="$MAS_MARKETING_VERSION" \
+            --config.mas.bundleVersion="$MAS_BUILD_NUMBER"
       - name: Verify package identity and signatures
+        env:
+          MAS_MARKETING_VERSION: ${{ inputs.marketing_version }}
+          MAS_BUILD_NUMBER: ${{ inputs.build_number }}
         run: |
           set -euo pipefail
           app='dist/mas-arm64/Mineloa.app'
           test -d "$app"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist" | grep -Fx 'com.jdeploys.mineloa'
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" | grep -Fx '${{ inputs.marketing_version }}'
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist" | grep -Fx '${{ inputs.build_number }}'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" | grep -Fx "$MAS_MARKETING_VERSION"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist" | grep -Fx "$MAS_BUILD_NUMBER"
           codesign --verify --deep --strict --verbose=2 "$app"
           pkg=$(find dist -maxdepth 2 -type f -name '*.pkg' -print -quit)
           test -n "$pkg"
