@@ -66,12 +66,27 @@ jobs:
           openssl pkcs12 -export -in build/installer.bundle.pem -out build/installer.p12 \
             -passout env:MAS_CERTIFICATE_PASSWORD -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
           find build -type f \( -name '*-modern.p12' -o -name '*.bundle.pem' \) -delete
+      - name: Import signing identities into a dedicated temporary keychain
+        env:
+          MAS_CERTIFICATE_PASSWORD: ${{ secrets.MAS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          task_keychain_path="$RUNNER_TEMP/mineloa-app-store.keychain-db"
+          task_keychain_password="$(openssl rand -hex 32)"
+          echo "::add-mask::$task_keychain_password"
+          security create-keychain -p "$task_keychain_password" "$task_keychain_path"
+          security unlock-keychain -p "$task_keychain_password" "$task_keychain_path"
+          security set-keychain-settings -lut 7200 "$task_keychain_path"
+          security import build/distribution.p12 -k "$task_keychain_path" -P "$MAS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+          security import build/installer.p12 -k "$task_keychain_path" -P "$MAS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$task_keychain_password" "$task_keychain_path" >/dev/null
+          task_keychains=()
+          while IFS= read -r task_keychain; do task_keychains+=("$task_keychain"); done < <(security list-keychains -d user | sed 's/^[[:space:]]*"//;s/"$//')
+          security list-keychains -d user -s "$task_keychain_path" "${task_keychains[@]}"
+          printf 'CSC_KEYCHAIN=%s\n' "$task_keychain_path" >> "$GITHUB_ENV"
       - name: Build signed Mac App Store package
         env:
-          CSC_LINK: build/distribution.p12
-          CSC_KEY_PASSWORD: ${{ secrets.MAS_CERTIFICATE_PASSWORD }}
-          CSC_INSTALLER_LINK: build/installer.p12
-          CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.MAS_CERTIFICATE_PASSWORD }}
+          CSC_NAME: 'CHANMI KIM (J3W2GDPJ7Y)'
           MAS_BUILD: 'true'
           MAS_APP_SIGNING_IDENTITY: 'Apple Distribution: CHANMI KIM (J3W2GDPJ7Y)'
           MAS_MARKETING_VERSION: ${{ inputs.marketing_version }}
@@ -129,3 +144,8 @@ jobs:
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
           ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
         run: xcrun altool --upload-app --type macos --file "$PKG_PATH" --apiKey "$ASC_API_KEY_ID" --apiIssuer "$ASC_API_ISSUER_ID"
+      - name: Remove temporary signing materials
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/mineloa-app-store.keychain-db" || true
+          rm -f build/distribution.p12 build/installer.p12 build/mineloa-app-store.provisionprofile
