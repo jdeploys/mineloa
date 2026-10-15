@@ -1,5 +1,9 @@
 # Mineloa 배포 가이드
 
+## App Store 심사 상태 조회
+
+`npm run status:app-store`로 조회 워크플로우를 실행합니다. GitHub Secrets의 기존 API 키로 버전·빌드·심사 상태를 읽고 Actions 로그에 출력합니다. 브라우저 로그인은 필요하지 않습니다. 실행 결과는 `gh run list --workflow app-store-status.yml`과 `gh run view <실행ID> --log`로 확인합니다. 앱이나 심사 제출을 변경하지 않습니다.
+
 ## Mac App Store 배포 스크립트
 
 ```bash
