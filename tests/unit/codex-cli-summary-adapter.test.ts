@@ -390,6 +390,39 @@ describe('runOwnedProcess', () => {
     vi.useRealTimers()
   })
 
+  it('keeps a progressing process alive, then terminates when output stops', async () => {
+    vi.useFakeTimers()
+    try {
+      const child = fakeChild()
+      const terminateProcessTree = vi.fn(async () => undefined)
+      const run = createOwnedProcessRunner({ spawnProcess: (() => child) as unknown as SpawnProcess, terminateProcessTree })
+      const pending = run({ command: 'helper', args: [], cwd: '/owned', timeoutMs: 100, idleTimeoutMs: 10 })
+      await vi.advanceTimersByTimeAsync(8)
+      child.stderr.write('progress:1\n')
+      await vi.advanceTimersByTimeAsync(8)
+      expect(terminateProcessTree).not.toHaveBeenCalled()
+      child.stderr.write('progress:2\n')
+      await vi.advanceTimersByTimeAsync(10)
+      await expect(pending).resolves.toEqual({ status: 'timeout' })
+      expect(terminateProcessTree).toHaveBeenCalledTimes(1)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('keeps the absolute deadline even when progress continues', async () => {
+    vi.useFakeTimers()
+    try {
+      const child = fakeChild()
+      const run = createOwnedProcessRunner({ spawnProcess: (() => child) as unknown as SpawnProcess, terminateProcessTree: async () => undefined })
+      const pending = run({ command: 'helper', args: [], cwd: '/owned', timeoutMs: 15, idleTimeoutMs: 10 })
+      await vi.advanceTimersByTimeAsync(8)
+      child.stderr.write('progress:1\n')
+      await vi.advanceTimersByTimeAsync(7)
+      await expect(pending).resolves.toEqual({ status: 'timeout' })
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { vi.useRealTimers() }
+  })
+
   it('independently rejects stdout beyond the default 1 MiB cap', async () => {
     const child = fakeChild()
     const terminateProcessTree = vi.fn(async () => undefined)

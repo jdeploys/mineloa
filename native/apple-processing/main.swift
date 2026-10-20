@@ -207,6 +207,21 @@ private func prepareSpeech() async throws -> StatusResult {
         // A nil request can mean another app finished installing the shared assets.
         do {
             if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+                // Report only advancing units, not a heartbeat: queued/stalled assets
+                // must not keep the host's inactivity deadline alive indefinitely.
+                let progress = request.progress
+                let reporter = Task {
+                    var previous: Int64 = 0
+                    while !Task.isCancelled {
+                        let completed = progress.completedUnitCount
+                        if completed > previous {
+                            FileHandle.standardError.write(Data("speech-assets-progress:\(completed)\n".utf8))
+                            previous = completed
+                        }
+                        do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                    }
+                }
+                defer { reporter.cancel() }
                 try await request.downloadAndInstall()
             }
         } catch {

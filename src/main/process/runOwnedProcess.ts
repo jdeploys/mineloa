@@ -10,6 +10,7 @@ export interface OwnedProcessRequest {
   cwd: string
   stdin?: string
   timeoutMs?: number
+  idleTimeoutMs?: number
   outputCapBytes?: number
   signal?: AbortSignal
 }
@@ -86,7 +87,9 @@ export function createOwnedProcessRunner(dependencies: {
       let stderrBytes = 0
       const cap = request.outputCapBytes ?? DEFAULT_OUTPUT_CAP_BYTES
 
+      let idleTimeout: ReturnType<typeof setTimeout> | undefined
       const cleanup = () => {
+        clearTimeout(idleTimeout)
         clearTimeout(timeout)
         request.signal?.removeEventListener('abort', onAbort)
       }
@@ -105,9 +108,15 @@ export function createOwnedProcessRunner(dependencies: {
           () => resolve(value),
         )
       }
+      const resetIdleTimeout = () => {
+        if (request.idleTimeoutMs === undefined) return
+        clearTimeout(idleTimeout)
+        idleTimeout = setTimeout(() => terminateAndFinish({ status: 'timeout' }), request.idleTimeoutMs)
+      }
       const collect = (stream: 'stdout' | 'stderr', chunk: Buffer | string) => {
         if (settled) return
         const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+        if (bytes.length > 0) resetIdleTimeout()
         if (stream === 'stdout') {
           stdoutBytes += bytes.length
           if (stdoutBytes > cap) return terminateAndFinish({ status: 'output_overflow', stream })
@@ -138,7 +147,10 @@ export function createOwnedProcessRunner(dependencies: {
       })
       request.signal?.addEventListener('abort', onAbort, { once: true })
       if (request.signal?.aborted) onAbort()
-      if (!settled) child.stdin.end(request.stdin ?? '')
+      if (!settled) {
+        resetIdleTimeout()
+        child.stdin.end(request.stdin ?? '')
+      }
     })
   }
 }

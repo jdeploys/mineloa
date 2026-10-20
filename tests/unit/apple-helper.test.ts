@@ -41,7 +41,7 @@ describe('Apple helper boundary', () => {
     const { helper, runProcess } = await fixture(JSON.stringify({ protocolVersion: 1, ok: true, result: {} }))
     runProcess.mockResolvedValueOnce({ status: 'timeout' })
     await expect(helper.call('prepare-speech')).rejects.toMatchObject({ code: 'APPLE_SPEECH_SETUP_TIMEOUT' })
-    expect(runProcess.mock.calls[0]![0].timeoutMs).toBe(120_000)
+    expect(runProcess.mock.calls[0]![0]).toMatchObject({ idleTimeoutMs: 120_000, timeoutMs: 1_200_000 })
     await expect(helper.call('status')).resolves.toEqual({})
     await expect(helper.call('prepare-speech')).resolves.toEqual({})
   })

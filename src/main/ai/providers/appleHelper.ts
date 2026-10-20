@@ -101,10 +101,11 @@ export class AppleHelper {
       throw safeProviderError('APPLE_HELPER_REQUEST_TOO_LARGE', 'The Apple processing request is too large.', false)
     }
     const timeoutMs = operation === 'status' ? 15_000
-      : operation === 'prepare-speech' ? 2 * 60_000
+      : operation === 'prepare-speech' ? 20 * 60_000
         : operation === 'transcribe' ? 45 * 60_000 : 30 * 60_000
     const result = await this.options.runProcess({
       command, args: [], cwd: resolve(command, '..'), stdin, timeoutMs,
+      ...(operation === 'prepare-speech' ? { idleTimeoutMs: 2 * 60_000 } : {}),
       outputCapBytes: operation === 'transcribe' ? 16 * 1024 * 1024 : operation === 'summarize' ? 5 * 1024 * 1024 : 256 * 1024,
       signal: this.signal,
     })
@@ -135,7 +136,7 @@ export class AppleHelper {
 }
 
 export function appleErrorMessage(code: string): string {
-  if (code === 'APPLE_SPEECH_SETUP_TIMEOUT') return '2분 동안 설치 완료를 확인하지 못했습니다. macOS가 준비를 계속할 수 있습니다. 잠시 후 상태를 다시 확인하거나 준비를 다시 시도하세요.'
+  if (code === 'APPLE_SPEECH_SETUP_TIMEOUT') return '설치 진행 응답을 기다리는 시간이 초과됐습니다. macOS가 준비를 계속할 수 있습니다. 잠시 후 상태를 다시 확인하거나 준비를 다시 시도하세요.'
   if (code === 'APPLE_SPEECH_RESERVATION_FAILED') return '이 앱에 음성 모델을 등록하지 못했습니다. 앱을 다시 실행한 뒤 준비를 다시 시도하세요.'
   if (code === 'APPLE_SPEECH_INSTALLATION_FAILED') return 'Apple 음성 모델 설치를 완료하지 못했습니다. 인터넷 연결을 확인하고 준비를 다시 시도하세요.'
   if (code === 'APPLE_SPEECH_ASSET_NOT_READY') return '음성 모델이 아직 준비되지 않았습니다. 음성 모델 준비를 실행하세요.'

@@ -18,15 +18,15 @@ Local hardware runs macOS 27.0.1 (26A434). The device already has both supported
 
 - Explicitly reserve the resolved supported locale before setup and before transcription, including when shared assets are already installed. A false reservation result means already reserved, not failure.
 - Recheck installation state after an installation error before declaring failure.
-- Bound one setup helper attempt to two minutes instead of twenty. After termination, recheck system status with a separate bounded status call. Report ready if installed; otherwise restore controls and offer status refresh and retry. The system may continue its own pending work.
+- Terminate a setup attempt after two minutes without output, while allowing advancing native installation progress to extend that inactivity deadline up to the existing twenty-minute absolute limit. Native progress reports contain only increasing completed-unit counts; a queued status or repeated heartbeat cannot prolong a stalled attempt. After termination, recheck system status with a separate bounded status call. Report ready if installed; otherwise restore controls and offer status refresh and retry. The system may continue its own pending work.
 - Distinguish reservation, installation, and setup-timeout failures. Do not expose raw native diagnostics. Waiting text does not assert that a download is actively progressing.
 - Preserve the build 6 explicit ready indicator and next-step instructions.
 
 ## Verification
 
-- Focused helper, adapter, and settings tests: 41 passed, including timeout queue recovery, shared completion at timeout, a successful UI retry after timeout, and clearing a stale failure after a ready status refresh.
+- Focused helper, adapter, settings, and shared process-runner tests: 94 passed, 1 platform-specific skip, including timeout queue recovery, shared completion at timeout, a successful UI retry after timeout, and clearing a stale failure after a ready status refresh.
 - Typecheck, lint, Swift contract verification passed.
 - Native helper: actual Korean (12.93 s) and English (10.65 s) test audio prepared and transcribed successfully. The English transcript includes the launch date and both named assignments; Korean includes the corresponding decisions and assignments.
-- Signed application validation and deployment results are recorded below when complete.
+- The initial build 7 CI run was cancelled before upload to include progress-sensitive timeouts; the replacement run and signed application results are recorded below when complete.
 
 Limit: deterministic timeout tests simulate process outcomes. No claim is made that a first-time network download or Apple's exact macOS 27.2 environment was reproduced.

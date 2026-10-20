@@ -147,7 +147,7 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
       <p role="status" className="settings-meta">
         {pendingOperation === 'apple_prepare'
           ? applePreparationSlow
-            ? 'macOS의 음성 모델 설치 응답을 기다리고 있습니다. 다운로드가 대기 중일 수도 있습니다. 최대 2분 후 설치 상태를 다시 확인합니다.'
+            ? 'macOS의 음성 모델 설치 응답을 기다리고 있습니다. 다운로드가 대기 중일 수도 있습니다. 2분 이상 진행 응답이 없으면 설치 상태를 다시 확인합니다.'
             : 'Apple 음성 모델을 확인하고 필요한 파일을 다운로드·설치하고 있습니다. 완료되면 이곳에 표시됩니다.'
           : transcription?.availability.available
             ? '음성 모델 준비 완료 · 지금 전사할 수 있습니다. 상단의 녹음 시작으로 새 회의를 녹음하고, 종료 후 해당 기록에서 회의록 만들기를 누르세요.'
