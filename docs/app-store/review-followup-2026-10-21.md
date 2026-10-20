@@ -30,3 +30,27 @@ Local hardware runs macOS 27.0.1 (26A434). The device already has both supported
 - The initial build 7 CI run was cancelled before upload to include progress-sensitive timeouts; the replacement run and signed application results are recorded below when complete.
 
 Limit: deterministic timeout tests simulate process outcomes. No claim is made that a first-time network download or Apple's exact macOS 27.2 environment was reproduced.
+
+### Signed application and real process evidence
+
+- The final MAS development build was signed with the Mineloa team's development identity. The actual sandboxed app imported an audio-only `.nnote` test recording and completed Apple Speech transcription and Apple Intelligence summary generation from the visible “회의록 만들기” action. The generated document includes the launch date and both tasks. This verifies stored audio processing, not physical microphone capture.
+- Ready indicators were confirmed in the signed app. Screenshots: `/tmp/Mineloa-Build7-Signed-Ready.png`, `/tmp/Mineloa-Build7-Signed-Complete.png`, `/tmp/Mineloa-Build7-Signed-Summary.png`.
+- A real sleeping child process hit the production 120-second inactivity limit; the next status process succeeded. A separate real process emitting advancing output remained alive beyond its initial inactivity deadline and was terminated after output stopped.
+- Direct debugger launch of the sandboxed app was unsuitable; the successful test used the normal app UI and archive import. No successful debugger test is claimed.
+
+### Distribution build
+
+- Source commit: `a225d74` (following `02b3b4a`).
+- [Build 7 validation/sign/upload workflow](https://github.com/jdeploys/mineloa/actions/runs/39446822428): succeeded. Apple package validation and upload succeeded.
+- Downloaded signed distribution artifacts: `dist/app-store-1.0-7/39446822428`.
+- Final local signed app verified with `codesign --verify --strict`, bundle version 7; packaged main code contains the inactivity watchdog and setup timeout recovery.
+
+### Resubmission
+
+- 2026-10-21 00:40 KST: build 1.0 (7) submitted, confirmed **WAITING_FOR_REVIEW** in App Store Connect.
+- New submission: [`c9ab3cf6-bb87-4d18-8940-c725aaaa7657`](https://appstoreconnect.apple.com/apps/6792231571/distribution/reviewsubmissions/details/c9ab3cf6-bb87-4d18-8940-c725aaaa7657).
+- Selected build ID: `f70c4e28-2a17-47e3-8a12-c9d8cdabbb47`.
+- Previous submission `98ff401e-e519-42ac-b4c4-822d0169951a` was cancelled to replace build 6, after build 7 was processed and available.
+- App Review notes contain the setup corrections, reproduction steps, actual signed-app validation, and cold-download limitation. `Mineloa-Build7-Signed-Complete.png` was attached to App Review information. Both notes and attachment were verified after reloading.
+- The cancelled submission no longer offers a reply action, so no new Resolution Center reply was sent; the explanation is in the new submission's App Review notes.
+- Manual release remains selected. The two-hour monitor now tracks build 7 and the new submission ID, ignoring the expected cancellation of the previous submission.
