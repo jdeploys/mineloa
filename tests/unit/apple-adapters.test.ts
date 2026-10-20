@@ -45,6 +45,17 @@ async function fixture(result: unknown) {
 }
 
 describe('Apple Speech adapter boundary', () => {
+  it('uses the installation result without launching a second status process', async () => {
+    const h = await fixture({ speech: { available: true }, summary: { available: false, code: 'APPLE_SUMMARY_MODEL_NOT_READY' } })
+    await expect(h.adapter.prepareSpeech()).resolves.toEqual({ available: true, code: null, message: null })
+    expect(h.call.mock.calls).toEqual([['prepare-speech']])
+  })
+
+  it('does not report readiness when installation returns unavailable', async () => {
+    const h = await fixture({ speech: { available: false, code: 'APPLE_SPEECH_ASSET_NOT_READY' }, summary: { available: true } })
+    await expect(h.adapter.prepareSpeech()).resolves.toMatchObject({ available: false, code: 'APPLE_SPEECH_ASSET_NOT_READY' })
+  })
+
   it('rejects a symlinked recording without launching the converter or helper transcription', async () => {
     const h = await fixture({})
     await rm(h.input)

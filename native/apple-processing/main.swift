@@ -193,12 +193,14 @@ private func prepareSpeech() async throws -> StatusResult {
     }
     let transcriber = SpeechTranscriber(locale: locale, preset: .timeIndexedTranscriptionWithAlternatives)
     if await AssetInventory.status(forModules: [transcriber]) != .installed {
-        guard let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) else {
-            throw Failure(code: "APPLE_SPEECH_ASSET_NOT_READY")
+        // A nil request can mean another app finished installing the shared assets.
+        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+            try await request.downloadAndInstall()
         }
-        try await request.downloadAndInstall()
     }
-    return StatusResult(speech: await speechAvailability(), summary: summaryAvailability())
+    let speech = await speechAvailability()
+    guard speech.available else { throw Failure(code: speech.code ?? "APPLE_SPEECH_ASSET_NOT_READY") }
+    return StatusResult(speech: speech, summary: summaryAvailability())
 }
 
 private final class ConverterFeed: @unchecked Sendable {

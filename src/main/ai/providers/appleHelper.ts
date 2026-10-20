@@ -130,10 +130,10 @@ export class AppleHelper {
 }
 
 export function appleErrorMessage(code: string): string {
-  if (code === 'APPLE_SPEECH_ASSET_NOT_READY') return 'Prepare the Korean speech model, then try again.'
+  if (code === 'APPLE_SPEECH_ASSET_NOT_READY') return '음성 모델이 아직 준비되지 않았습니다. 음성 모델 준비를 실행하세요.'
   if (code === 'APPLE_AUDIO_INVALID') return 'Apple Speech could not process this audio file.'
   if (code === 'APPLE_TRANSCRIPT_INVALID') return 'Apple Speech returned an invalid transcription.'
-  if (code === 'APPLE_SPEECH_LOCALE_UNSUPPORTED') return 'Korean Apple Speech transcription is not supported on this Mac.'
+  if (code === 'APPLE_SPEECH_LOCALE_UNSUPPORTED') return '이 Mac에서 선택된 언어의 Apple 음성 전사를 지원하지 않습니다.'
   if (code === 'APPLE_SUMMARY_INTELLIGENCE_DISABLED') return 'Enable Apple Intelligence in System Settings, then try again.'
   if (code === 'APPLE_SUMMARY_MODEL_NOT_READY') return 'The Apple Intelligence model is not ready. Try again after setup finishes.'
   if (code === 'APPLE_SUMMARY_LOCALE_UNSUPPORTED') return 'Apple Intelligence cannot summarize this language on this Mac.'

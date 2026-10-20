@@ -66,6 +66,48 @@ async function expand() {
 describe('processing provider settings visible outcomes', () => {
   afterEach(cleanup)
 
+  function appleApi(available = false, overrides: Partial<SettingsApi> = {}) {
+    return settingsApi({
+      getProcessingProviders: vi.fn(async () => ({ ...defaults, transcriptionProvider: 'apple_speech' as const })),
+      listProcessingProviderDescriptors: vi.fn(async () => [...descriptors, {
+        id: 'apple_speech' as const, stage: 'transcription' as const, displayName: 'Apple 음성 전사',
+        availability: { available, code: null, message: null }, privacy: 'local' as const, capabilities: [],
+      }]),
+      ...overrides,
+    })
+  }
+
+  it('shows already installed speech assets as ready with a next step instead of an inert preparation button', async () => {
+    const api = appleApi(true)
+    render(<ProcessingProviderSettingsView settings={api} />)
+    expect(await screen.findByText(/음성 모델 준비 완료/)).toHaveTextContent('녹음 시작')
+    expect(screen.queryByRole('button', { name: '음성 모델 준비' })).not.toBeInTheDocument()
+    expect(api.prepareAppleSpeech).not.toHaveBeenCalled()
+  })
+
+  it('shows immediate preparation feedback and then the returned ready state even if old descriptors are stale', async () => {
+    const preparation = deferred<Awaited<ReturnType<SettingsApi['prepareAppleSpeech']>>>()
+    const api = appleApi(false, { prepareAppleSpeech: vi.fn(() => preparation.promise) })
+    render(<ProcessingProviderSettingsView settings={api} />)
+    await userEvent.setup().click(await screen.findByRole('button', { name: '음성 모델 준비' }))
+    expect(screen.getByText(/필요한 파일을 다운로드·설치/)).toBeVisible()
+    expect(screen.getByRole('button', { name: '음성 모델 준비 중…' })).toBeDisabled()
+    await act(async () => preparation.resolve({ available: true, code: null, message: null }))
+    expect(await screen.findByText(/음성 모델 준비 완료/)).toBeVisible()
+    expect(screen.queryByRole('button', { name: '음성 모델 준비' })).not.toBeInTheDocument()
+  })
+
+  it.each(['unavailable', 'rejected'])('shows an actionable retry for %s preparation without exposing diagnostics', async (outcome) => {
+    const api = appleApi(false, { prepareAppleSpeech: vi.fn(async () => {
+      if (outcome === 'rejected') throw new Error('/private/secret')
+      return { available: false, code: 'APPLE_SPEECH_ASSET_NOT_READY', message: '/private/secret' }
+    }) })
+    render(<ProcessingProviderSettingsView settings={api} />)
+    await userEvent.setup().click(await screen.findByRole('button', { name: '음성 모델 준비' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('인터넷 연결')
+    expect(screen.getByRole('button', { name: '음성 모델 준비 다시 시도' })).toBeEnabled()
+  })
+
   it('shows OpenAI as the default and hides local settings', async () => {
     render(<ProcessingProviderSettingsView settings={settingsApi()} />)
     expect(await screen.findByLabelText('음성 변환 방식')).toHaveValue('openai')

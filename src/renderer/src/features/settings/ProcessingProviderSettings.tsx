@@ -19,11 +19,19 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
   const [value, setValue] = useState<ProcessingSettings | null>(null)
   const [descriptors, setDescriptors] = useState<ProcessingProviderDescriptor[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [applePreparationError, setApplePreparationError] = useState<string | null>(null)
+  const [applePreparationSlow, setApplePreparationSlow] = useState(false)
   const [pendingOperation, setPendingOperation] = useState<ProviderOperation | null>(null)
   const pendingOperationRef = useRef<ProviderOperation | null>(null)
   const generation = useRef(0)
   const descriptorGeneration = useRef(0)
   const busy = pendingOperation !== null
+
+  useEffect(() => {
+    if (pendingOperation !== 'apple_prepare') return
+    const timer = setTimeout(() => setApplePreparationSlow(true), 30_000)
+    return () => clearTimeout(timer)
+  }, [pendingOperation])
 
   const refreshDescriptors = useCallback(async () => {
     const current = ++descriptorGeneration.current
@@ -84,11 +92,18 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
   const refreshCodexStatus = () => runOperation('codex_refresh', refreshDescriptors)
   const prepareAppleSpeech = () => runOperation('apple_prepare', async () => {
     setError(null)
+    setApplePreparationError(null)
+    setApplePreparationSlow(false)
     try {
-      await settings.prepareAppleSpeech()
-      await refreshDescriptors()
+      const availability = await settings.prepareAppleSpeech()
+      ++descriptorGeneration.current
+      setDescriptors((current) => current.map((item) => item.id === 'apple_speech'
+        ? { ...item, availability } : item))
+      if (!availability.available) {
+        setApplePreparationError('음성 모델 준비가 완료되지 않았습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요.')
+      }
     } catch {
-      setError('음성 모델을 준비하지 못했습니다. 잠시 후 다시 시도하세요.')
+      setApplePreparationError('음성 모델을 준비하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요. 계속 실패하면 앱을 다시 실행하세요.')
     }
   })
 
@@ -121,8 +136,21 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
     {transcription?.id === 'apple_speech' && transcription.availability.available === false && <p role="status" className="settings-meta">{transcription.availability.message}</p>}
     {summary?.id === 'apple_foundation' && summary.availability.available === false && <p role="status" className="settings-meta">{summary.availability.message}</p>}
     {value.transcriptionProvider === 'apple_speech' && <FieldHelp>Apple 음성 전사는 화자를 자동 구분하지 않습니다. Mac의 기본 언어가 한국어이면 한국어, 그 외에는 영어 음성 모델을 준비합니다. 모델 준비에는 인터넷이 필요할 수 있습니다.</FieldHelp>}
-    {value.transcriptionProvider === 'apple_speech' && <button type="button" disabled={busy} onClick={() => void prepareAppleSpeech()}>{pendingOperation === 'apple_prepare' ? '준비 중…' : '음성 모델 준비'}</button>}
+    {value.transcriptionProvider === 'apple_speech' && <div className="apple-speech-setup" aria-busy={pendingOperation === 'apple_prepare'}>
+      <p role="status" className="settings-meta">
+        {pendingOperation === 'apple_prepare'
+          ? applePreparationSlow
+            ? 'Apple 음성 모델 준비가 계속 진행 중입니다. 다운로드에는 수 분이 걸릴 수 있습니다. 인터넷 연결을 유지하고 완료 안내를 기다려 주세요.'
+            : 'Apple 음성 모델을 확인하고 필요한 파일을 다운로드·설치하고 있습니다. 완료되면 이곳에 표시됩니다.'
+          : transcription?.availability.available
+            ? '음성 모델 준비 완료 · 지금 전사할 수 있습니다. 상단의 녹음 시작으로 새 회의를 녹음하고, 종료 후 해당 기록에서 회의록 만들기를 누르세요.'
+            : '음성 모델 준비가 필요합니다. 아래 버튼을 누르면 이 Mac에 필요한 모델을 설치합니다.'}
+      </p>
+      {applePreparationError !== null && <p role="alert" className="settings-alert">{applePreparationError}</p>}
+      {!transcription?.availability.available && <button type="button" disabled={busy} onClick={() => void prepareAppleSpeech()}>{pendingOperation === 'apple_prepare' ? '음성 모델 준비 중…' : applePreparationError ? '음성 모델 준비 다시 시도' : '음성 모델 준비'}</button>}
+    </div>}
     {value.summaryProvider === 'apple_foundation' && <FieldHelp>API 키 없이 이 Mac에서 요약합니다. Apple silicon Mac과 macOS 26 이상이 필요합니다. 시스템 설정 → Apple Intelligence 및 Siri에서 Apple Intelligence를 켜고 모델 준비를 완료한 뒤 상태를 다시 확인하세요.</FieldHelp>}
+    {summary?.id === 'apple_foundation' && summary.availability.available && <p role="status" className="settings-meta">Apple Intelligence 요약 준비 완료 · 전사가 끝나면 회의록을 자동으로 작성합니다.</p>}
     {(value.transcriptionProvider === 'apple_speech' || value.summaryProvider === 'apple_foundation') && <button type="button" disabled={busy} onClick={() => void refreshDescriptors()}>상태 다시 확인</button>}
     {usesOpenAi && <div className="openai-settings" role="region" aria-label="OpenAI 설정">
       <div className="local-settings-heading">

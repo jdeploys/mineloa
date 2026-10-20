@@ -50,9 +50,9 @@ async function trustedInput(rootPath: string, input: string): Promise<string> {
   }
 }
 
-async function stageAvailability(helper: AppleHelper, stage: 'speech' | 'summary'): Promise<ProviderAvailability> {
+async function stageAvailability(helper: AppleHelper, stage: 'speech' | 'summary', operation: 'status' | 'prepare-speech' = 'status'): Promise<ProviderAvailability> {
   try {
-    const status = statusSchema.parse(await helper.call('status'))
+    const status = statusSchema.parse(await helper.call(operation))
     const reported = status[stage]
     if (reported.available) {
       if (reported.code != null || reported.message != null) throw new Error('Inconsistent Apple helper status')
@@ -88,8 +88,7 @@ export class AppleSpeechTranscriptionAdapter implements TranscriptionProvider {
   }
 
   async prepareSpeech(): Promise<ProviderAvailability> {
-    await this.options.helper.call('prepare-speech')
-    return this.availability()
+    return stageAvailability(this.options.helper, 'speech', 'prepare-speech')
   }
 
   async transcribe(request: TranscriptionProviderRequest): Promise<NormalizedTranscription> {
