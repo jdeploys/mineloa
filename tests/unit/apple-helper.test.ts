@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppleHelper } from '../../src/main/ai/providers/appleHelper'
-import type { OwnedProcessRequest } from '../../src/main/process/runOwnedProcess'
+import type { OwnedProcessRequest, OwnedProcessResult } from '../../src/main/process/runOwnedProcess'
 
 const temporary: string[] = []
 afterEach(async () => {
@@ -18,7 +18,7 @@ async function fixture(stdout: string) {
   const path = join(helperDirectory, 'apple-processing-helper')
   await writeFile(path, '')
   await chmod(path, 0o755)
-  const runProcess = vi.fn(async (_request: OwnedProcessRequest) => ({ status: 'success' as const, exitCode: 0 as const, stdout, stderr: 'SECRET /Users/person/key' }))
+  const runProcess = vi.fn(async (_request: OwnedProcessRequest): Promise<OwnedProcessResult> => ({ status: 'success' as const, exitCode: 0 as const, stdout, stderr: 'SECRET /Users/person/key' }))
   const helper = new AppleHelper({
     isPackaged: false, resourcesPath: projectDirectory, projectDirectory,
     platform: 'darwin', arch: 'arm64', osRelease: '25.5.0', runProcess,
@@ -37,6 +37,15 @@ describe('Apple helper boundary', () => {
     await expect(helper.call('status')).rejects.toMatchObject({ code: 'APPLE_HELPER_CANCELLED' })
     expect(runProcess).toHaveBeenCalledTimes(1)
   })
+  it('bounds stalled setup and releases the queue for status and a retry', async () => {
+    const { helper, runProcess } = await fixture(JSON.stringify({ protocolVersion: 1, ok: true, result: {} }))
+    runProcess.mockResolvedValueOnce({ status: 'timeout' })
+    await expect(helper.call('prepare-speech')).rejects.toMatchObject({ code: 'APPLE_SPEECH_SETUP_TIMEOUT' })
+    expect(runProcess.mock.calls[0]![0].timeoutMs).toBe(120_000)
+    await expect(helper.call('status')).resolves.toEqual({})
+    await expect(helper.call('prepare-speech')).resolves.toEqual({})
+  })
+
   it('rejects a protocol mismatch without exposing helper diagnostics', async () => {
     const { helper, runProcess, path } = await fixture(JSON.stringify({ protocolVersion: 2, ok: true, result: {} }))
     await expect(helper.call('status')).rejects.toMatchObject({ code: 'APPLE_HELPER_INVALID_RESPONSE' })

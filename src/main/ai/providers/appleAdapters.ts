@@ -88,7 +88,13 @@ export class AppleSpeechTranscriptionAdapter implements TranscriptionProvider {
   }
 
   async prepareSpeech(): Promise<ProviderAvailability> {
-    return stageAvailability(this.options.helper, 'speech', 'prepare-speech')
+    const result = await stageAvailability(this.options.helper, 'speech', 'prepare-speech')
+    if (result.code === 'APPLE_SPEECH_SETUP_TIMEOUT') {
+      // The system owns the download; the caller may time out just as it completes.
+      const current = await this.availability()
+      if (current.available) return current
+    }
+    return result
   }
 
   async transcribe(request: TranscriptionProviderRequest): Promise<NormalizedTranscription> {

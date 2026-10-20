@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppleSpeechTranscriptionAdapter } from '../../src/main/ai/providers/appleAdapters'
+import { safeProviderError } from '../../src/main/ai/providers/providerErrors'
 import type { AppleHelper } from '../../src/main/ai/providers/appleHelper'
 
 const roots: string[] = []
@@ -54,6 +55,19 @@ describe('Apple Speech adapter boundary', () => {
   it('does not report readiness when installation returns unavailable', async () => {
     const h = await fixture({ speech: { available: false, code: 'APPLE_SPEECH_ASSET_NOT_READY' }, summary: { available: true } })
     await expect(h.adapter.prepareSpeech()).resolves.toMatchObject({ available: false, code: 'APPLE_SPEECH_ASSET_NOT_READY' })
+  })
+
+  it.each([true, false])('rechecks shared asset state after a setup timeout (installed=%s)', async (installed) => {
+    const h = await fixture({})
+    h.call.mockRejectedValueOnce(safeProviderError('APPLE_SPEECH_SETUP_TIMEOUT', 'Setup timed out', true))
+      .mockResolvedValueOnce({ speech: { available: installed, ...(installed ? {} : { code: 'APPLE_SPEECH_ASSET_NOT_READY' }) }, summary: { available: true } })
+    await expect(h.adapter.prepareSpeech()).resolves.toMatchObject(installed
+      ? { available: true, code: null }
+      : { available: false, code: 'APPLE_SPEECH_SETUP_TIMEOUT' })
+    expect(h.call.mock.calls).toEqual([['prepare-speech'], ['status']])
+    // The next manual attempt remains usable; no rejected queue is retained.
+    h.call.mockResolvedValueOnce({ speech: { available: true }, summary: { available: true } })
+    await expect(h.adapter.prepareSpeech()).resolves.toMatchObject({ available: true })
   })
 
   it('rejects a symlinked recording without launching the converter or helper transcription', async () => {

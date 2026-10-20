@@ -125,7 +125,7 @@
       "entitlementsInherit": "build/entitlements.mas.inherit.plist",
       "signIgnore": [],
       "bundleShortVersion": "1.0",
-      "bundleVersion": "6",
+      "bundleVersion": "7",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Mineloa needs microphone access to record meetings locally on this Mac.",
         "ITSAppUsesNonExemptEncryption": false
@@ -141,7 +141,7 @@
       "entitlementsInherit": "build/entitlements.mas.inherit.plist",
       "signIgnore": [],
       "bundleShortVersion": "1.0",
-      "bundleVersion": "6",
+      "bundleVersion": "7",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Mineloa needs microphone access to record meetings locally on this Mac.",
         "ITSAppUsesNonExemptEncryption": false

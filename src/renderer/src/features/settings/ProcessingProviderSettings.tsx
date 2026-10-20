@@ -37,7 +37,10 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
     const current = ++descriptorGeneration.current
     try {
       const next = await settings.listProcessingProviderDescriptors()
-      if (descriptorGeneration.current === current) setDescriptors(next)
+      if (descriptorGeneration.current === current) {
+        setDescriptors(next)
+        if (next.some((item) => item.id === 'apple_speech' && item.availability.available)) setApplePreparationError(null)
+      }
     } catch {
       if (descriptorGeneration.current === current) setError(loadError)
     }
@@ -100,7 +103,11 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
       setDescriptors((current) => current.map((item) => item.id === 'apple_speech'
         ? { ...item, availability } : item))
       if (!availability.available) {
-        setApplePreparationError('음성 모델 준비가 완료되지 않았습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요.')
+        setApplePreparationError(availability.code === 'APPLE_SPEECH_SETUP_TIMEOUT'
+          ? '설치 응답 대기 시간이 지났습니다. macOS가 준비를 계속할 수 있습니다. 잠시 후 상태를 다시 확인하거나 준비를 다시 시도하세요.'
+          : availability.code === 'APPLE_SPEECH_RESERVATION_FAILED'
+            ? '음성 모델 사용 등록에 실패했습니다. 앱을 다시 실행한 뒤 준비를 다시 시도하세요.'
+            : '음성 모델 준비가 완료되지 않았습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요.')
       }
     } catch {
       setApplePreparationError('음성 모델을 준비하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요. 계속 실패하면 앱을 다시 실행하세요.')
@@ -140,7 +147,7 @@ export function ProcessingProviderSettings({ settings }: { settings: SettingsApi
       <p role="status" className="settings-meta">
         {pendingOperation === 'apple_prepare'
           ? applePreparationSlow
-            ? 'Apple 음성 모델 준비가 계속 진행 중입니다. 다운로드에는 수 분이 걸릴 수 있습니다. 인터넷 연결을 유지하고 완료 안내를 기다려 주세요.'
+            ? 'macOS의 음성 모델 설치 응답을 기다리고 있습니다. 다운로드가 대기 중일 수도 있습니다. 최대 2분 후 설치 상태를 다시 확인합니다.'
             : 'Apple 음성 모델을 확인하고 필요한 파일을 다운로드·설치하고 있습니다. 완료되면 이곳에 표시됩니다.'
           : transcription?.availability.available
             ? '음성 모델 준비 완료 · 지금 전사할 수 있습니다. 상단의 녹음 시작으로 새 회의를 녹음하고, 종료 후 해당 기록에서 회의록 만들기를 누르세요.'

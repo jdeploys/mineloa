@@ -108,6 +108,33 @@ describe('processing provider settings visible outcomes', () => {
     expect(screen.getByRole('button', { name: '음성 모델 준비 다시 시도' })).toBeEnabled()
   })
 
+  it('unlocks setup after timeout and lets the user retry successfully', async () => {
+    const prepare = vi.fn<SettingsApi['prepareAppleSpeech']>()
+      .mockResolvedValueOnce({ available: false, code: 'APPLE_SPEECH_SETUP_TIMEOUT', message: '/private/secret' })
+      .mockResolvedValueOnce({ available: true, code: null, message: null })
+    render(<ProcessingProviderSettingsView settings={appleApi(false, { prepareAppleSpeech: prepare })} />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: '음성 모델 준비' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('설치 응답 대기 시간이 지났습니다')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('/private/secret')
+    expect(screen.getByRole('button', { name: '상태 다시 확인' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: '음성 모델 준비 다시 시도' }))
+    expect(await screen.findByText(/음성 모델 준비 완료/)).toBeVisible()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('clears a setup failure when status refresh finds completed shared assets', async () => {
+    const api = appleApi(false, { prepareAppleSpeech: vi.fn(async () => ({ available: false, code: 'APPLE_SPEECH_SETUP_TIMEOUT', message: null })) })
+    render(<ProcessingProviderSettingsView settings={api} />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: '음성 모델 준비' }))
+    expect(await screen.findByRole('alert')).toBeVisible()
+    vi.mocked(api.listProcessingProviderDescriptors).mockImplementation(appleApi(true).listProcessingProviderDescriptors)
+    await user.click(screen.getByRole('button', { name: '상태 다시 확인' }))
+    expect(await screen.findByText(/음성 모델 준비 완료/)).toBeVisible()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('shows OpenAI as the default and hides local settings', async () => {
     render(<ProcessingProviderSettingsView settings={settingsApi()} />)
     expect(await screen.findByLabelText('음성 변환 방식')).toHaveValue('openai')

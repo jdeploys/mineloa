@@ -186,16 +186,34 @@ private func summaryAvailability() -> Availability {
     }
 }
 
+private func reserveSpeechLocale(_ locale: Locale) async throws {
+    do {
+        // Assets are shared system-wide, but subscriptions belong to this app.
+        // false means this locale is already reserved, not a failure.
+        _ = try await AssetInventory.reserve(locale: locale)
+    } catch {
+        throw Failure(code: "APPLE_SPEECH_RESERVATION_FAILED")
+    }
+}
+
 private func prepareSpeech() async throws -> StatusResult {
     guard SpeechTranscriber.isAvailable else { throw Failure(code: "APPLE_SPEECH_UNAVAILABLE") }
     guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: speechLocale) else {
         throw Failure(code: "APPLE_SPEECH_LOCALE_UNSUPPORTED")
     }
+    try await reserveSpeechLocale(locale)
     let transcriber = SpeechTranscriber(locale: locale, preset: .timeIndexedTranscriptionWithAlternatives)
     if await AssetInventory.status(forModules: [transcriber]) != .installed {
         // A nil request can mean another app finished installing the shared assets.
-        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-            try await request.downloadAndInstall()
+        do {
+            if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+                try await request.downloadAndInstall()
+            }
+        } catch {
+            // A shared asset may finish installing despite an individual request failure.
+            guard await AssetInventory.status(forModules: [transcriber]) == .installed else {
+                throw Failure(code: "APPLE_SPEECH_INSTALLATION_FAILED")
+            }
         }
     }
     let speech = await speechAvailability()
@@ -298,6 +316,7 @@ private func transcribe(_ payload: Payload?) async throws -> TranscriptionResult
     guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: speechLocale) else {
         throw Failure(code: "APPLE_SPEECH_LOCALE_UNSUPPORTED")
     }
+    try await reserveSpeechLocale(locale)
     let file = try AVAudioFile(forReading: url)
     let measuredDuration = Double(file.length) / file.processingFormat.sampleRate
     guard measuredDuration.isFinite, measuredDuration >= 0 else { throw Failure(code: "APPLE_AUDIO_INVALID") }
