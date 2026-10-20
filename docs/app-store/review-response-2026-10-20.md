@@ -26,3 +26,17 @@ To test the core feature without an API key:
 4. Open the new recording in “최근 기록” and press “회의록 만들기”. The app transcribes the recording and then generates its summary on the device without an API key.
 
 The included sample meeting contains a prerecorded transcript and summary for orientation; the steps above exercise fresh transcription and summarization.
+
+## Validation and upload
+
+- Focused settings / Apple adapter / helper tests: 36 passed.
+- TypeScript and ESLint: passed.
+- Native Swift contracts: passed; arm64 helper compiled successfully.
+- Native helper: installed-model status and prepare succeeded; a 12.93-second Korean synthetic meeting produced a nonempty transcript and summary.
+- Signed MAS development app: ready speech and summary indicators observed through the UI.
+- Built app integration: test WAV encoded through MediaRecorder, stored using the recording IPC API, then processed with real Apple providers and the default four-section template. Nonempty transcription, core summary, decisions, actions and discussion sections confirmed. This test used synthetic audio, not physical microphone input. Chromium fake-microphone testing did not provide usable speech, so it is not counted as speech validation.
+- Production build 6 uploaded successfully: https://github.com/jdeploys/mineloa/actions/runs/39441565469 (commit 8701e2e).
+- App Review reply sent at 2026-10-20 23:56 KST with `Mineloa-Build6-Ready.png`. Included installed-model readiness, real provider processing validation, and the fact that build 6 was uploaded and awaiting Apple processing before selection.
+- Selected build UUID `a02cf900-0b10-4014-95c5-61dc92fe36a2` (1.0 / 6), saved updated review notes, and resubmitted at **2026-10-20 23:59 KST**.
+- App Store Connect confirmed **심사 대기 중 / WAITING_FOR_REVIEW**, with build **1.0 (6)** on the existing submission.
+- Monitoring automation updated to build 6; unchanged status remains quiet. Manual release setting retained.
