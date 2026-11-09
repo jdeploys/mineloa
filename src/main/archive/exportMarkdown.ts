@@ -1,4 +1,7 @@
 import { summaryItemLine } from '../../shared/summaryItemTime'
+import type { MeetingRepository } from '../db/meetingRepository'
+import type { TemplateRepository } from '../db/templateRepository'
+import { DEFAULT_TEMPLATE_ID } from '../templates/defaultTemplate'
 
 export interface MarkdownMeetingDocument {
   meeting: { title: string; createdAt: string; durationMs: number }
@@ -43,4 +46,17 @@ export function exportMarkdown(document: MarkdownMeetingDocument): string {
     lines.push(`[${timestamp(segment.startMs)}] ${speaker}: ${segment.text}`)
   }
   return `${lines.join('\n').trimEnd()}\n`
+}
+
+export type MarkdownRepository = Pick<MeetingRepository, 'requireById' | 'listSpeakers' | 'listTranscript' | 'listSummarySections' | 'listActionItems'>
+
+export function meetingMarkdown(repository: MarkdownRepository, templates: Pick<TemplateRepository, 'findById'>, meetingId: string): string {
+  const meeting = repository.requireById(meetingId)
+  const template = templates.findById(meeting.selectedTemplateId ?? DEFAULT_TEMPLATE_ID)
+  const titles = new Map(template?.sections.map((section) => [section.id, section.title]) ?? [])
+  return exportMarkdown({
+    meeting, speakers: repository.listSpeakers(meetingId), transcript: repository.listTranscript(meetingId),
+    summarySections: repository.listSummarySections(meetingId).map((section) => ({ ...section, title: titles.get(section.templateSectionId) ?? '요약 섹션' })),
+    actionItems: repository.listActionItems(meetingId),
+  })
 }

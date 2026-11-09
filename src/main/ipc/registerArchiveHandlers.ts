@@ -7,8 +7,7 @@ import type { ArchiveOperationResult } from '../../shared/contracts/archive'
 import { MAX_ARCHIVE_BYTES } from '../archive/archiveSchema'
 import { exportMeetingArchive } from '../archive/exportMeeting'
 import { importMeetingArchive } from '../archive/importMeeting'
-import { exportMarkdown } from '../archive/exportMarkdown'
-import { DEFAULT_TEMPLATE_ID } from '../templates/defaultTemplate'
+import { meetingMarkdown } from '../archive/exportMarkdown'
 
 interface IpcMainLike { handle(channel: string, listener: (event: unknown, ...args: unknown[]) => unknown): void }
 interface DialogLike {
@@ -101,13 +100,7 @@ export function registerArchiveHandlers(
       assertExportableStatus(meeting.status)
       const selected = await dialog.showSaveDialog({ title: 'Markdown 내보내기', defaultPath: `${meeting.title}.md`, filters: [{ name: 'Markdown', extensions: ['md'] }] })
       if (selected.canceled || selected.filePath === undefined) return { status: 'cancelled' }
-      const template = templates.findById(meeting.selectedTemplateId ?? DEFAULT_TEMPLATE_ID)
-      const titles = new Map(template?.sections.map((section) => [section.id, section.title]) ?? [])
-      const markdown = exportMarkdown({
-        meeting, speakers: repository.listSpeakers(meetingId), transcript: repository.listTranscript(meetingId),
-        summarySections: repository.listSummarySections(meetingId).map((section) => ({ ...section, title: titles.get(section.templateSectionId) ?? '요약 섹션' })),
-        actionItems: repository.listActionItems(meetingId),
-      })
+      const markdown = meetingMarkdown(repository, templates, meetingId)
       await atomicWrite(selected.filePath, markdown)
       return { status: 'success' }
     } catch (error) { return failure('EXPORT_FAILED', error) }
