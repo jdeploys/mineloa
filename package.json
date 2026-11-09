@@ -181,7 +181,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.4",
     "electron": "^43.1.0",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.17.0",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.2",
     "eslint-plugin-react-hooks": "^7.1.1",
