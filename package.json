@@ -1,6 +1,6 @@
 {
   "name": "mineloa",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Private desktop meeting recorder and summarizer",
   "main": "out/main/index.js",
