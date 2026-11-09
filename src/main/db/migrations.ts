@@ -109,6 +109,15 @@ const migration4 = `
   PRAGMA user_version = 4;
 `
 
+const migration5 = `
+  CREATE TABLE claude_summaries (
+    meeting_id TEXT PRIMARY KEY REFERENCES meetings(id) ON DELETE CASCADE,
+    markdown TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  PRAGMA user_version = 5;
+`
+
 const finishDuplicateAttempt = `
   UPDATE processing_attempts
   SET finished_at = ?, succeeded = 0, sanitized_error = ?
@@ -117,8 +126,8 @@ const finishDuplicateAttempt = `
 
 export function runMigrations(database: Database.Database): void {
   const version = database.pragma('user_version', { simple: true }) as number
-  if (version > 4) {
-    throw new Error(`Database version ${version} is newer than supported version 4`)
+  if (version > 5) {
+    throw new Error(`Database version ${version} is newer than supported version 5`)
   }
   if (version === 0) {
     database.exec('BEGIN IMMEDIATE')
@@ -184,6 +193,16 @@ export function runMigrations(database: Database.Database): void {
     database.exec('BEGIN IMMEDIATE')
     try {
       database.exec(migration4)
+      database.exec('COMMIT')
+    } catch (error) {
+      database.exec('ROLLBACK')
+      throw error
+    }
+  }
+  if ((database.pragma('user_version', { simple: true }) as number) === 4) {
+    database.exec('BEGIN IMMEDIATE')
+    try {
+      database.exec(migration5)
       database.exec('COMMIT')
     } catch (error) {
       database.exec('ROLLBACK')

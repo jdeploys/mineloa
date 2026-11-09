@@ -16,7 +16,7 @@ import {
   type StoredSummarySection,
 } from '../../shared/contracts/summary'
 import { assertMeetingTransition } from '../domain/meetingState'
-import type { MeetingSearchInput } from '../../shared/contracts/meetingsApi'
+import type { ClaudeSummary, MeetingSearchInput } from '../../shared/contracts/meetingsApi'
 
 interface MeetingRow {
   id: string
@@ -474,10 +474,27 @@ export class MeetingRepository {
       const meeting = this.requireById(meetingId)
       assertMeetingTransition(meeting.status, 'completed')
       this.writeSummary(meetingId, sections, actionItems)
+      this.database.prepare('DELETE FROM claude_summaries WHERE meeting_id = ?').run(meetingId)
       this.database.prepare("UPDATE meetings SET status = 'completed', updated_at = ? WHERE id = ?")
         .run(new Date().toISOString(), meetingId)
       return { sections: this.listSummarySections(meetingId), actionItems: this.listActionItems(meetingId) }
     })
+  }
+
+  findClaudeSummary(meetingId: string): ClaudeSummary | null {
+    const row = this.database.prepare('SELECT markdown, created_at FROM claude_summaries WHERE meeting_id = ?').get(meetingId) as
+      | { markdown: string; created_at: string }
+      | undefined
+    return row === undefined ? null : { markdown: row.markdown, createdAt: row.created_at }
+  }
+
+  saveClaudeSummary(meetingId: string, markdown: string): ClaudeSummary {
+    const createdAt = new Date().toISOString()
+    this.database.prepare(
+      `INSERT INTO claude_summaries (meeting_id, markdown, created_at) VALUES (?, ?, ?)
+       ON CONFLICT(meeting_id) DO UPDATE SET markdown = excluded.markdown, created_at = excluded.created_at`,
+    ).run(meetingId, markdown, createdAt)
+    return { markdown, createdAt }
   }
 
   private writeSummary(

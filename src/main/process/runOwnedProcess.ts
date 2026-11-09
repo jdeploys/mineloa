@@ -8,6 +8,7 @@ export interface OwnedProcessRequest {
   command: string
   args: readonly string[]
   cwd: string
+  env?: NodeJS.ProcessEnv
   stdin?: string
   timeoutMs?: number
   idleTimeoutMs?: number
@@ -71,6 +72,7 @@ export function createOwnedProcessRunner(dependencies: {
         child = spawnProcess(request.command, [...request.args], {
           shell: false,
           cwd: request.cwd,
+          env: request.env,
           windowsHide: true,
           stdio: ['pipe', 'pipe', 'pipe'],
           detached: process.platform !== 'win32',

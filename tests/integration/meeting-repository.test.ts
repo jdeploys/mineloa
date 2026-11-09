@@ -38,6 +38,20 @@ afterEach(() => {
 })
 
 describe('MeetingRepository', () => {
+  it('drops the stored Claude summary once the meeting summary is made again', () => {
+    const database = openDatabase(temporaryDatabasePath())
+    const meetings = new MeetingRepository(database)
+    meetings.create({ ...recordingMeeting(), status: 'summarizing' })
+    meetings.saveClaudeSummary('meeting-1', '# 첫 정리')
+    expect(meetings.saveClaudeSummary('meeting-1', '# 다시 정리').markdown).toBe('# 다시 정리')
+    expect(meetings.findClaudeSummary('meeting-1')?.markdown).toBe('# 다시 정리')
+
+    meetings.completeSummary('meeting-1', [], [])
+
+    expect(meetings.findClaudeSummary('meeting-1')).toBeNull()
+    database.close()
+  })
+
   it('lists recent non-deleted meetings newest first without changing recording state', () => {
     const directory = mkdtempSync(join(tmpdir(), 'nnote-recent-'))
     const database = openDatabase(join(directory, 'meetings.sqlite'))

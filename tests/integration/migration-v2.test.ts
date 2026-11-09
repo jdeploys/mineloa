@@ -41,7 +41,7 @@ describe('migration 2', () => {
       expect(JSON.parse(row.sanitized_error)).toEqual({ code: 'PROCESSING_INTERRUPTED', message: 'Processing was interrupted. Try again.', retryable: true })
     }
     expect(rows.find(({ id }) => id === 'history')).toMatchObject({ sanitized_error: '{"code":"OLD"}' })
-    expect(db.pragma('user_version', { simple: true })).toBe(4)
+    expect(db.pragma('user_version', { simple: true })).toBe(5)
     expect(() => db.prepare(`INSERT INTO processing_attempts (id, meeting_id, stage, started_at) VALUES ('duplicate', 'm1', 'cleanup', '2026-01-04')`).run()).toThrow()
     db.close()
   })

@@ -5,6 +5,7 @@ import type { CreateTemplateInput, UpdateTemplateInput } from '../shared/contrac
 import { ProcessingStatusSchema, type ProcessingStatus } from '../shared/contracts/processing'
 import { RecoveryExportResultSchema } from '../shared/contracts/recovery'
 import {
+  ClaudeSummarySchema,
   CreateRecordingMeetingInputSchema,
   MeetingDocumentSchema,
   MeetingIdSchema,
@@ -133,6 +134,14 @@ const archive: DesktopApi['archive'] = Object.freeze({
   importMeeting: () => ipcRenderer.invoke('archive:import-meeting').then((value) => ArchiveOperationResultSchema.parse(value)),
 })
 
-const desktopApi: DesktopApi = Object.freeze({ settings, recording, recovery, templates, processing, meetings, archive })
+const claudeSummary: DesktopApi['claudeSummary'] = Object.freeze({
+  available: () => ipcRenderer.invoke('claude-summary:available').then((value) => value === true),
+  get: (meetingId: string) => ipcRenderer.invoke('claude-summary:get', MeetingIdSchema.parse(meetingId))
+    .then((value) => ClaudeSummarySchema.nullable().parse(value)),
+  generate: (meetingId: string) => ipcRenderer.invoke('claude-summary:generate', MeetingIdSchema.parse(meetingId))
+    .then((value) => ClaudeSummarySchema.parse(value)),
+})
+
+const desktopApi: DesktopApi = Object.freeze({ settings, recording, recovery, templates, processing, meetings, archive, claudeSummary })
 
 contextBridge.exposeInMainWorld('desktopApi', desktopApi)

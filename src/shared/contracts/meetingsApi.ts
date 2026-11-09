@@ -55,6 +55,18 @@ export const CreateRecordingMeetingInputSchema = z.object({
 }).strict()
 export type CreateRecordingMeetingInput = z.input<typeof CreateRecordingMeetingInputSchema>
 
+export const ClaudeSummarySchema = z.object({
+  markdown: z.string().min(1),
+  createdAt: z.string().datetime(),
+}).strict()
+export type ClaudeSummary = z.infer<typeof ClaudeSummarySchema>
+
+export interface ClaudeSummaryApi {
+  available(): Promise<boolean>
+  get(meetingId: string): Promise<ClaudeSummary | null>
+  generate(meetingId: string): Promise<ClaudeSummary>
+}
+
 export interface MeetingsApi {
   list(): Promise<PublicMeeting[]>
   search(input: MeetingSearchInput): Promise<PublicMeeting[]>

@@ -73,7 +73,7 @@ function meetingStatusIcon(status: MeetingDocument['meeting']['status']): IconNa
   return 'warning'
 }
 
-export function MeetingDetail({ document, onBack, onRenameMeeting, onRenameSpeaker, headingRef, processing, initialProcessingStatus, archive, onRefresh }: {
+export function MeetingDetail({ document, onBack, onRenameMeeting, onRenameSpeaker, headingRef, processing, initialProcessingStatus, archive, onRefresh, onOpenClaudeSummary }: {
   document: MeetingDocument
   onBack(): void
   onRenameMeeting?(meetingId: string, title: string): Promise<PublicMeeting>
@@ -83,6 +83,7 @@ export function MeetingDetail({ document, onBack, onRenameMeeting, onRenameSpeak
   initialProcessingStatus?: ProcessingStatusValue
   archive?: ArchiveApi
   onRefresh?(): void | Promise<void>
+  onOpenClaudeSummary?(): void
 }) {
   const [localTitle, setLocalTitle] = useState(document.meeting.title)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -234,7 +235,7 @@ export function MeetingDetail({ document, onBack, onRenameMeeting, onRenameSpeak
         </div>
       )}
       {processing === undefined || initialProcessingStatus === undefined ? null : <ProcessingStatus meetingId={document.meeting.id} processing={processing} initialStatus={initialProcessingStatus} onStatusChange={(status) => { if (status.state === 'completed' || status.state === 'failed' || status.state === 'cleanup_failed') void onRefresh?.() }} />}
-      {archive === undefined || !hasDocumentContent ? null : <ActionBar><Button icon="export" variant="tertiary" onClick={() => void exportDocument('nnote')}>회의 내보내기</Button><Button icon="download" variant="tertiary" onClick={() => void exportDocument('markdown')}>Markdown 내보내기</Button></ActionBar>}
+      {archive === undefined || !hasDocumentContent ? null : <ActionBar><Button icon="export" variant="tertiary" onClick={() => void exportDocument('nnote')}>회의 내보내기</Button><Button icon="download" variant="tertiary" onClick={() => void exportDocument('markdown')}>Markdown 내보내기</Button>{onOpenClaudeSummary === undefined || orderedSections.length === 0 ? null : <Button icon="model" variant="tertiary" onClick={onOpenClaudeSummary}>Claude 요약본 보기</Button>}</ActionBar>}
       {archiveMessage === null ? null : <InlineNotice tone={archiveMessage.tone} title="내보내기 결과"><p role="status">{archiveMessage.message}</p></InlineNotice>}
     </SurfaceCard>
     {hasDocumentContent ? <article className="meeting-document" aria-label="회의 문서">

@@ -26,6 +26,10 @@ import { TemplateService } from './templates/templateService'
 import { startSingleInstanceApp } from './app/singleInstance'
 import { registerMediaProtocol } from './media/registerMediaProtocol'
 import { registerMeetingHandlers } from './ipc/registerMeetingHandlers'
+import { registerClaudeSummaryHandlers } from './ipc/registerClaudeSummaryHandlers'
+import { ClaudeSummaryService } from './ai/claudeSummaryService'
+import { ClaudeCli } from './ai/claudeCli'
+import { meetingMarkdown } from './archive/exportMarkdown'
 import { registerArchiveHandlers } from './ipc/registerArchiveHandlers'
 import { reconcileImportJournals } from './archive/importMeeting'
 import { bootstrapAfterImportRecovery } from './app/archiveStartup'
@@ -194,6 +198,11 @@ if (verificationRequest !== null) {
         registerProcessingHandlers(ipcMain, processingService)
         registerMeetingHandlers(ipcMain, meetings, templateService)
         registerArchiveHandlers(ipcMain, dialog, meetings, templateRepository, database, recordingsDirectory)
+        registerClaudeSummaryHandlers(ipcMain, process.mas ? null : new ClaudeSummaryService(
+          meetings,
+          (meetingId) => meetingMarkdown(meetings, templateRepository, meetingId),
+          new ClaudeCli(runOwnedProcess, app.getPath('temp')),
+        ))
         registerMediaProtocol(protocol, meetings, recordingsDirectory)
 
         installApplicationMenu(applicationName, process.platform === 'darwin', () => {

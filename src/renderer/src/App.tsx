@@ -8,6 +8,7 @@ import { AppShell } from './components/layout/AppShell'
 import { PageHeader } from './components/layout/PageHeader'
 import { Dashboard } from './features/meetings/Dashboard'
 import { MeetingDetail } from './features/meetings/MeetingDetail'
+import { ClaudeSummaryPage } from './features/meetings/ClaudeSummaryPage'
 import {
   MediaRecorderController,
   RecordingTerminalError,
@@ -21,7 +22,7 @@ import { ProcessingProviderSettings } from './features/settings/ProcessingProvid
 import { TemplateEditor } from './features/templates/TemplateEditor'
 import { useThemePreference } from './hooks/useThemePreference'
 
-type Screen = 'all' | 'templates' | 'settings' | 'detail'
+type Screen = 'all' | 'templates' | 'settings' | 'detail' | 'claude-summary'
 type RecordingControllerPort = Pick<MediaRecorderController, 'start' | 'stop' | 'discard'> & Partial<Pick<MediaRecorderController, 'pause' | 'resume' | 'subscribe' | 'resumeRecovered' | 'listMicrophones'>>
 
 export function App({
@@ -37,6 +38,7 @@ export function App({
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatusValue | null>(null)
   const [recoveredActive, setRecoveredActive] = useState(false)
   const [screen, setScreen] = useState<Screen>('all')
+  const [claudeAvailable, setClaudeAvailable] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [archiveNotice, setArchiveNotice] = useState<string | null>(null)
   const [quickStartRequest, setQuickStartRequest] = useState(0)
@@ -80,6 +82,12 @@ export function App({
     })
     return () => { current = false }
   }, [desktopApi, refreshMeetings])
+
+  useEffect(() => {
+    let current = true
+    desktopApi.claudeSummary?.available().then((available) => { if (current) setClaudeAvailable(available) }, () => undefined)
+    return () => { current = false }
+  }, [desktopApi])
 
   useEffect(() => {
     if (screen !== 'all') {
@@ -264,6 +272,13 @@ export function App({
       initialProcessingStatus={processingStatus ?? undefined}
       archive={desktopApi.archive}
       onRefresh={refreshOpenMeeting}
+      onOpenClaudeSummary={claudeAvailable ? () => setScreen('claude-summary') : undefined}
+    />}
+    {screen === 'claude-summary' && document !== null && desktopApi.claudeSummary !== undefined && <ClaudeSummaryPage
+      meeting={document.meeting}
+      api={desktopApi.claudeSummary}
+      headingRef={routeHeading}
+      onBack={() => setScreen('detail')}
     />}
     {screen === 'templates' && <main className="page-container template-page">
       <PageHeader ref={routeHeading} eyebrow="TEMPLATES" title="요약 템플릿" description="회의 종류에 맞는 요약 구조와 지시문을 관리합니다." backLabel="전체 기록" onBack={backToAll} />

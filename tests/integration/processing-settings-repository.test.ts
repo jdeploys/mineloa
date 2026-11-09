@@ -54,7 +54,7 @@ describe('processing settings repository', () => {
       localWhisperModel: 'base',
     })
     expect(database.prepare('SELECT value FROM existing_data').pluck().get()).toBe('preserve-me')
-    expect(database.pragma('user_version', { simple: true })).toBe(4)
+    expect(database.pragma('user_version', { simple: true })).toBe(5)
     database.close()
   })
 
