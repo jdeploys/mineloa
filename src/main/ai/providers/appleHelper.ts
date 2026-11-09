@@ -1,12 +1,22 @@
 import { access, lstat, realpath } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { release } from 'node:os'
+import { homedir, release } from 'node:os'
 import { z } from 'zod'
 import type { OwnedProcessRequest, OwnedProcessResult } from '../../process/runOwnedProcess'
+import { reportProviderFailure } from '../providerDiagnostics'
 import { safeProviderError } from './providerErrors'
 
 export type AppleOperation = 'status' | 'prepare-speech' | 'transcribe' | 'summarize'
+
+function processDetail(operation: AppleOperation, result: OwnedProcessResult, elapsedMs: number): string {
+  const parts = [`operation=${operation}`, `status=${result.status}`, `elapsed=${Math.round(elapsedMs / 1000)}s`]
+  if ('exitCode' in result) parts.push(`exit=${result.exitCode}`)
+  if ('code' in result) parts.push(`code=${result.code}`)
+  if ('stream' in result) parts.push(`stream=${result.stream}`)
+  if ('stderr' in result && result.stderr.trim() !== '') parts.push(`stderr=${result.stderr.trim().slice(-400)}`)
+  return parts.join(' ')
+}
 
 const responseSchema = z.object({
   protocolVersion: z.literal(1),
@@ -103,28 +113,41 @@ export class AppleHelper {
     const timeoutMs = operation === 'status' ? 15_000
       : operation === 'prepare-speech' ? 20 * 60_000
         : operation === 'transcribe' ? 45 * 60_000 : 30 * 60_000
+    const startedAt = Date.now()
     const result = await this.options.runProcess({
       command, args: [], cwd: resolve(command, '..'), stdin, timeoutMs,
       ...(operation === 'prepare-speech' ? { idleTimeoutMs: 2 * 60_000 } : {}),
       outputCapBytes: operation === 'transcribe' ? 16 * 1024 * 1024 : operation === 'summarize' ? 5 * 1024 * 1024 : 256 * 1024,
       signal: this.signal,
     })
+    const report = (code: string) => reportProviderFailure('apple-helper', code,
+      new Error(processDetail(operation, result, Date.now() - startedAt)), [homedir()])
     if (result.status === 'timeout' && operation === 'prepare-speech') {
+      report('APPLE_SPEECH_SETUP_TIMEOUT')
       throw safeProviderError('APPLE_SPEECH_SETUP_TIMEOUT', appleErrorMessage('APPLE_SPEECH_SETUP_TIMEOUT'), true)
     }
-    if (result.status === 'timeout') throw safeProviderError('APPLE_HELPER_TIMEOUT', 'Apple on-device processing timed out. Try again.', true)
-    if (result.status !== 'success') throw safeProviderError('APPLE_HELPER_FAILED', 'Apple on-device processing failed. Try again.', true)
+    if (result.status === 'timeout') {
+      report('APPLE_HELPER_TIMEOUT')
+      throw safeProviderError('APPLE_HELPER_TIMEOUT', 'Apple on-device processing timed out. Try again.', true)
+    }
+    if (result.status !== 'success') {
+      report('APPLE_HELPER_FAILED')
+      throw safeProviderError('APPLE_HELPER_FAILED', 'Apple on-device processing failed. Try again.', true)
+    }
     let parsed: unknown
     try { parsed = JSON.parse(result.stdout) } catch {
+      report('APPLE_HELPER_INVALID_RESPONSE')
       throw safeProviderError('APPLE_HELPER_INVALID_RESPONSE', 'Apple on-device processing returned an invalid response.', false)
     }
     const response = responseSchema.safeParse(parsed)
     if (!response.success || (response.data.ok && (response.data.result === undefined || response.data.error !== undefined))
       || (!response.data.ok && (response.data.error === undefined || response.data.result !== undefined))) {
+      report('APPLE_HELPER_INVALID_RESPONSE')
       throw safeProviderError('APPLE_HELPER_INVALID_RESPONSE', 'Apple on-device processing returned an invalid response.', false)
     }
     if (!response.data.ok) {
       const code = response.data.error!.code
+      report(code)
       throw safeProviderError(
         safeAppleCodes.has(code) ? code : 'APPLE_HELPER_FAILED',
         appleErrorMessage(code),

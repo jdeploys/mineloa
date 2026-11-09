@@ -48,6 +48,8 @@ import { LocalWhisperTranscriptionAdapter } from './ai/providers/localWhisperTra
 import { resolveLocalRuntimePaths } from './localRuntime/runtimePaths'
 import { resolveBundledFfmpegPath } from './localRuntime/runtimePaths'
 import { AppleHelper } from './ai/providers/appleHelper'
+import { setProviderFailureSink } from './ai/providerDiagnostics'
+import { failureLogFile } from './ai/failureLogFile'
 import { AppleSpeechTranscriptionAdapter, AppleFoundationSummaryAdapter } from './ai/providers/appleAdapters'
 import { safeProviderError } from './ai/providers/providerErrors'
 import {
@@ -71,6 +73,7 @@ if (verificationRequest !== null) {
   }
   startSingleInstanceApp(app, BrowserWindow, () => {
   app.whenReady().then(async () => {
+    setProviderFailureSink(failureLogFile(app.getPath('logs')))
     const userDataDirectory = app.getPath('userData')
     const databasePath = join(userDataDirectory, 'nnote.sqlite')
     const firstInstall = !existsSync(databasePath)

@@ -1,7 +1,8 @@
 import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { setProviderFailureSink } from '../../src/main/ai/providerDiagnostics'
 import { AppleHelper } from '../../src/main/ai/providers/appleHelper'
 import type { OwnedProcessRequest, OwnedProcessResult } from '../../src/main/process/runOwnedProcess'
 
@@ -82,5 +83,18 @@ describe('Apple helper boundary', () => {
     })
     await expect(helper.call('status')).rejects.toMatchObject({ code: 'APPLE_HELPER_UNAVAILABLE' })
     expect(runProcess).not.toHaveBeenCalled()
+  })
+
+  it('writes why the helper failed to the failure log', async () => {
+    const lines: string[] = []
+    setProviderFailureSink((line) => lines.push(line))
+    const { helper, runProcess } = await fixture('')
+    runProcess.mockResolvedValueOnce({ status: 'nonzero_exit', exitCode: 134, stdout: '', stderr: `Fatal error in ${homedir()}/model\n` })
+
+    await expect(helper.call('summarize', { context: {} })).rejects.toMatchObject({ code: 'APPLE_HELPER_FAILED' })
+
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatch(/^\[apple-helper\] APPLE_HELPER_FAILED operation=summarize status=nonzero_exit elapsed=\d+s exit=134 stderr=Fatal error in \[REDACTED\]\/model$/)
+    setProviderFailureSink((line) => console.warn(line))
   })
 })

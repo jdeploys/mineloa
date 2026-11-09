@@ -735,6 +735,7 @@ private struct Main {
             default: throw Failure(code: "APPLE_HELPER_INVALID_REQUEST")
             }
         } catch {
+            FileHandle.standardError.write(Data("\(String(reflecting: error))\n".utf8))
             emit(ErrorResponse(error: .init(code: errorCode(error))))
         }
     }

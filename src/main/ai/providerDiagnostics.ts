@@ -22,11 +22,17 @@ export function formatProviderFailure(
   return `[${scope}] ${code}${status} ${detail}`
 }
 
+let failureSink: (line: string) => void = (line) => console.warn(line)
+
+export function setProviderFailureSink(sink: (line: string) => void): void {
+  failureSink = sink
+}
+
 export function reportProviderFailure(
   scope: string,
   code: string,
   error: unknown,
   absolutePaths: readonly string[] = [],
 ): void {
-  console.warn(formatProviderFailure(scope, code, error, absolutePaths))
+  failureSink(formatProviderFailure(scope, code, error, absolutePaths))
 }
